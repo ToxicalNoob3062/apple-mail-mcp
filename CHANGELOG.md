@@ -1,5 +1,20 @@
 ## [Unreleased]
 
+## [2.20.23] - 2026-10-19
+
+### Security
+
+- **The outbound attachment read policy now treats app state under a user `~/Library`
+  as protected.** `resolveAttachmentReadPath` refused hidden segments, four credential
+  roots and `Application Support/*/config.json`, and allowed the rest of the home
+  directory. It now also refuses anything under a user Library except iCloud Drive and
+  CloudStorage, unless `APPLE_MAIL_MCP_ATTACHMENT_READ_ROOTS` names a root for it (a root
+  that holds the whole home directory never lifts the rule). Both the canonical path and
+  the path as given are judged, so a hidden symlink to an ordinary file is refused too.
+  A Library is recognised at the top of the boot volume, of a volume under `/Volumes` and
+  of `/System/Volumes/Data`, and the filesystem root is no longer an allowed root. The
+  function keeps its signature.
+
 ## [2.20.22] - 2026-10-19
 
 ### Performance

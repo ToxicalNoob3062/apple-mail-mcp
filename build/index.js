@@ -64830,43 +64830,76 @@ function sensitiveRoots() {
     }
   });
 }
+function homeCanonical() {
+  try {
+    return canonicalize(homedir());
+  } catch {
+    return void 0;
+  }
+}
 function isWithinRoot(candidate, root) {
   return candidate === root || candidate.startsWith(root + sep);
 }
 function hasHiddenPathSegment(candidate) {
   return candidate.split(sep).some((segment) => segment.startsWith(".") && segment.length > 1);
 }
-function isProtectedPath(candidate) {
+function userLibraryTail(candidate) {
+  const segments = candidate.split(sep).filter(Boolean);
+  const lower = segments.map((segment) => segment.toLowerCase());
+  const volumeTops = [
+    0,
+    lower[0] === "volumes" ? 2 : -1,
+    lower.slice(0, 3).join("/") === "system/volumes/data" ? 3 : -1
+  ];
+  for (const i of volumeTops) {
+    if (i >= 0 && lower[i] === "users" && lower[i + 2] === "library") return lower.slice(i + 3);
+  }
+  const home = homeCanonical() ?? resolve3(homedir());
+  if (home === sep || !isWithinRoot(candidate, home)) return void 0;
+  const relative = candidate.slice(home.length).split(sep).filter(Boolean);
+  if (relative[0]?.toLowerCase() !== "library") return void 0;
+  return relative.slice(1).map((segment) => segment.toLowerCase());
+}
+function isLibraryDocument(tail) {
+  return LIBRARY_DOCUMENT_FOLDERS.some((folder) => folder.every((name2, i) => tail[i] === name2));
+}
+function isProtectedPath(candidate, exemptRoots = []) {
   if (hasHiddenPathSegment(candidate)) return true;
   if (sensitiveRoots().some((root) => isWithinRoot(candidate, root))) return true;
-  let home;
-  try {
-    home = canonicalize(homedir());
-  } catch {
-    home = resolve3(homedir());
-  }
-  if (!isWithinRoot(candidate, home)) return false;
-  const relative = candidate.slice(home.length).split(sep).filter(Boolean);
-  return relative.length >= 4 && relative[0].toLowerCase() === "library" && relative[1].toLowerCase() === "application support" && relative.at(-1)?.toLowerCase() === "config.json";
+  const tail = userLibraryTail(candidate);
+  if (!tail || isLibraryDocument(tail)) return false;
+  const home = homeCanonical();
+  return !exemptRoots.some(
+    (root) => isWithinRoot(candidate, root) && !(home && isWithinRoot(home, root))
+  );
 }
-function configuredRoots(env) {
-  const raw = env[ATTACHMENT_READ_ROOTS_ENV];
-  const extraRoots = raw === void 0 ? [] : raw.split(delimiter2).map((root) => root.trim()).filter(Boolean);
-  const requested = [...DEFAULT_ATTACHMENT_READ_ROOTS, ...extraRoots];
-  for (const root of requested) {
-    if (!isAbsolute(root)) {
-      throw new Error(`${ATTACHMENT_READ_ROOTS_ENV} entries must be absolute paths.`);
-    }
+function canonicalTmpdir() {
+  try {
+    return [canonicalize(tmpdir())];
+  } catch {
+    return [];
   }
+}
+function canonicalRoots(requested) {
   const resolved = [];
   for (const root of requested) {
     try {
       const canonical = canonicalize(resolve3(root));
-      if (!resolved.includes(canonical)) resolved.push(canonical);
+      if (canonical !== sep && !resolved.includes(canonical)) resolved.push(canonical);
     } catch {
     }
   }
   return resolved;
+}
+function explicitRoots(env) {
+  const raw = env[ATTACHMENT_READ_ROOTS_ENV];
+  const extraRoots = raw === void 0 ? [] : raw.split(delimiter2).map((root) => root.trim()).filter(Boolean);
+  for (const root of extraRoots) {
+    if (!isAbsolute(root)) {
+      throw new Error(`${ATTACHMENT_READ_ROOTS_ENV} entries must be absolute paths.`);
+    }
+  }
+  return canonicalRoots(extraRoots);
 }
 function resolveAttachmentReadPath(filePath, env = process.env) {
   if (!isAbsolute(filePath)) {
@@ -64886,19 +64919,22 @@ function resolveAttachmentReadPath(filePath, env = process.env) {
     if (error3 instanceof Error && error3.message.includes("not a regular file")) throw error3;
     throw new Error(`Attachment file not found: "${filePath}"`);
   }
-  if (isProtectedPath(canonical)) {
+  const explicit = explicitRoots(env);
+  const exempt = [...explicit, ...canonicalTmpdir()];
+  if (isProtectedPath(canonical, exempt) || isProtectedPath(resolve3(filePath), exempt)) {
     throw new Error(
-      `Attachment path is in a protected location: "${filePath}". Hidden files and credential/configuration locations cannot be sent as attachments.`
+      `Attachment path is in a protected location: "${filePath}". Hidden files, credential locations and user Library folders (except iCloud Drive and CloudStorage) cannot be sent as attachments unless ${ATTACHMENT_READ_ROOTS_ENV} names a root for them.`
     );
   }
-  if (!configuredRoots(env).some((root) => isWithinRoot(canonical, root))) {
+  const roots = [...canonicalRoots(DEFAULT_ATTACHMENT_READ_ROOTS), ...explicit];
+  if (!roots.some((root) => isWithinRoot(canonical, root))) {
     throw new Error(
       `Attachment path is outside the allowed read roots: "${filePath}". Use an ordinary home-directory, /Volumes, or temporary path, or configure ${ATTACHMENT_READ_ROOTS_ENV} for an additional explicit root.`
     );
   }
   return canonical;
 }
-var ATTACHMENT_READ_ROOTS_ENV, DEFAULT_ATTACHMENT_READ_ROOTS, SENSITIVE_HOME_ROOTS;
+var ATTACHMENT_READ_ROOTS_ENV, DEFAULT_ATTACHMENT_READ_ROOTS, SENSITIVE_HOME_ROOTS, LIBRARY_DOCUMENT_FOLDERS;
 var init_attachmentReadPolicy = __esm({
   "src/utils/attachmentReadPolicy.ts"() {
     "use strict";
@@ -64910,6 +64946,7 @@ var init_attachmentReadPolicy = __esm({
       join(homedir(), ".config", "gh"),
       join(homedir(), "Library", "Keychains")
     ];
+    LIBRARY_DOCUMENT_FOLDERS = [["mobile documents", "com~apple~clouddocs"], ["cloudstorage"]];
   }
 });
 
