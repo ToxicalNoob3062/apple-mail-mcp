@@ -1,5 +1,31 @@
 ## [Unreleased]
 
+## [2.20.30] - 2026-10-24
+
+### Fixed
+
+- Stop mail merge before sending when selected SMTP credentials or configuration
+  cannot be resolved, instead of silently switching to Mail.app. Report the
+  selected transport in attempted-batch results, including complete failures.
+- Let mail merge explicitly select SMTP or AppleScript and honor allowed SMTP
+  sender overrides. Reject ambiguous SMTP account labels and unapproved senders
+  before sending the batch.
+- Reject a bare Mail.app account label on explicit SMTP single-message sends
+  instead of silently sending from the configured SMTP identity.
+- Make setup diagnostics distinguish SMTP configuration from authenticated
+  delivery, and describe the existing best-effort IMAP Sent-folder copy.
+- Preserve literal dollar sequences in personalized SMTP and Mail.app messages.
+- Retain Bcc recipients in the author's saved IMAP draft and Sent-folder copy,
+  while keeping the delivered message's Bcc header hidden.
+- Clarify account-label routing and quoted-body limitations in the tool
+  description and bundled Apple Mail skill for Codex and other hosts.
+
+### Documentation
+
+- README Tool Reference: document `send-serial-email`'s new `transport` parameter
+  and returned `transport`, and `send-email`'s account-label routing and
+  explicit-SMTP label rejection (#329).
+
 ## [2.20.29] - 2026-10-24
 ### Security
 - **Upgrade Zod to `^4.6.6`** to address GHSA-mrhx-c7xc-m3w5. Preserve the

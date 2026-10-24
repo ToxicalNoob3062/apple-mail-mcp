@@ -19,6 +19,19 @@ function fakeManager(over: Partial<AppleMailManager> = {}): AppleMailManager {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("runDoctor (C3)", () => {
+  it("distinguishes SMTP configuration from authentication and Sent-copy success", async () => {
+    vi.stubEnv("APPLE_MAIL_MCP_IMAP_USER", "");
+    vi.stubEnv("APPLE_MAIL_MCP_IMAP_ACCOUNTS", "");
+    vi.stubEnv("APPLE_MAIL_MCP_SMTP_HOST", "smtp.example.test");
+    vi.stubEnv("APPLE_MAIL_MCP_SMTP_USER", "sender@example.test");
+    const report = await runDoctor(fakeManager());
+    const smtp = report.checks.find((check) => check.name === "SMTP transport");
+    expect(smtp?.status).toBe("ok");
+    expect(smtp?.detail).toContain("SMTP authentication and delivery have not been checked");
+    expect(smtp?.detail).toContain("best-effort Sent-folder copy through matching-account IMAP");
+    expect(smtp?.detail).not.toContain("no Mail.app Sent-folder copy");
+  });
+
   it("reports accounts, names disabled ones, and stays healthy when only warnings", async () => {
     vi.stubEnv("APPLE_MAIL_MCP_IMAP_USER", "");
     vi.stubEnv("APPLE_MAIL_MCP_IMAP_ACCOUNTS", "");
