@@ -145,4 +145,25 @@ describe("sender guard on AppleScript compose", () => {
     expect(h.scripts[0]).not.toContain("set sender");
     expect(h.scripts[0]).toContain("sender of newMessage");
   });
+
+  it("draft and send both compose visible:true, the only form close/delete releases (#312)", () => {
+    h.composeOutput = "draft created:Cory <mrcoryzhao@gmail.com>";
+    expect(new AppleMailManager().createDraft(["to@example.com"], "s", "b").success).toBe(true);
+    h.composeOutput = "sent:Cory <mrcoryzhao@gmail.com>";
+    expect(new AppleMailManager().sendEmail(["to@example.com"], "s", "b").success).toBe(true);
+    const scripts = compose();
+    expect(scripts).toHaveLength(2);
+    for (const s of scripts) {
+      expect(s).toContain("visible:true");
+      expect(s).not.toContain("visible:false");
+    }
+    // A visible draft is closed only after Drafts shows it, never straight after `save`.
+    const draft = scripts[0];
+    const save = draft.indexOf("save newMessage");
+    const confirm = draft.indexOf("messages of drafts mailbox whose subject is draftSubject", save);
+    const close = draft.indexOf("close newMessage saving yes");
+    expect(save).toBeGreaterThan(-1);
+    expect(confirm).toBeGreaterThan(save);
+    expect(close).toBeGreaterThan(confirm);
+  });
 });

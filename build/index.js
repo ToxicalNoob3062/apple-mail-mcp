@@ -99518,6 +99518,19 @@ function attachmentSettleBlock(msgVar, expected) {
         end repeat
         delay ${ATTACHMENT_SETTLE_GRACE_S}`;
 }
+var DRAFT_SAVE_CONFIRM_TIMEOUT_S = 10;
+function draftSaveBlock(msgVar) {
+  return `
+        set draftSubject to subject of ${msgVar}
+        set priorDrafts to count of (messages of drafts mailbox whose subject is draftSubject)
+        save ${msgVar}
+        set saveDeadline to (current date) + ${DRAFT_SAVE_CONFIRM_TIMEOUT_S}
+        repeat until (count of (messages of drafts mailbox whose subject is draftSubject)) > priorDrafts
+          if (current date) > saveDeadline then return "error:Mail did not confirm the draft in Drafts within ${DRAFT_SAVE_CONFIRM_TIMEOUT_S}s; its compose window was left open so the draft is not lost."
+          delay 0.1
+        end repeat
+        close ${msgVar} saving yes`;
+}
 function countAttachmentCommands(commands) {
   return (commands.match(/make new attachment/g) || []).length;
 }
@@ -101928,6 +101941,14 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
    * any attachments to load (attachmentSettleBlock), verify the sender before
    * the message leaves, and report the sender Mail actually used. A draft is
    * saved and closed explicitly rather than left to Mail's autosave (#293).
+   *
+   * Both modes compose with `visible:true`. A `visible:false` outgoing message
+   * has no compose window, so neither `close` nor `delete` releases it: it
+   * stays in `outgoing messages` until Mail quits and autosaves into Drafts
+   * later, bringing back a draft the user already deleted (#312). A visible
+   * one is released by `close`/`delete` — the cost is a compose window that
+   * flashes for a fraction of a second, without taking focus — but must not be
+   * closed before its draft is committed (draftSaveBlock).
    */
   composeWithCommands(mode, recipientCommands, safeSubject, safeBody, account, attachmentCommands) {
     const sender = this.resolveSender(account);
@@ -101935,14 +101956,14 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
     const settle3 = attachmentSettleBlock("newMessage", countAttachmentCommands(attachmentCommands));
     const prefix = mode === "send" ? SENT_PREFIX : DRAFT_PREFIX;
     const script = buildAppLevelScript(`
-        set newMessage to make new outgoing message with properties {subject:"${safeSubject}", content:"${safeBody}", visible:${mode === "send"}}
+        set newMessage to make new outgoing message with properties {subject:"${safeSubject}", content:"${safeBody}", visible:true}
         tell newMessage
           ${recipientCommands}
           ${sender.setSender}
           ${attachmentCommands}
         end tell${settle3}
         ${sender.guard}
-        ${mode === "send" ? "send newMessage" : "save newMessage\n        close newMessage saving yes"}
+        ${mode === "send" ? "send newMessage" : draftSaveBlock("newMessage")}
         return "${prefix}" & actualSender
       `);
     const result = executeAppleScript(script, { timeoutMs: 6e4, maxRetries: 1 });
