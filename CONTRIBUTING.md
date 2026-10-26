@@ -5,12 +5,14 @@ Thank you for your interest in contributing! This document provides guidelines f
 ## Development Setup
 
 1. **Clone the repository**
+
    ```bash
    git clone https://github.com/sweetrb/apple-mail-mcp.git
    cd apple-mail-mcp
    ```
 
 2. **Install dependencies**
+
    ```bash
    corepack enable && pnpm install --frozen-lockfile
    ```
@@ -18,6 +20,7 @@ Thank you for your interest in contributing! This document provides guidelines f
    This repo pins pnpm via `packageManager` in `package.json` — `corepack enable` provides it. Development needs Node >= 22.13 (CI tests on Node 22 and 24); the published server itself runs on Node >= 20. A `preinstall` guard rejects `npm install`/`yarn` in a git checkout: they resolve dependencies off-lockfile, so the committed bundle would mismatch CI.
 
 3. **Build the project**
+
    ```bash
    pnpm run build
    ```
@@ -82,6 +85,26 @@ A green CI run alone does not exercise the live Mail.app behavior.
 - Test both success and failure paths
 - Test edge cases (empty strings, special characters, etc.)
 - Security-sensitive changes should include tests in `src/security.test.ts`
+
+## Before you open a PR
+
+Review time is the bottleneck here, so a few ground rules keep it moving:
+
+- **One open PR at a time per contributor.** Further PRs from the same author
+  wait unreviewed until the current one is merged or closed. A tight series is
+  fine. Land it one PR at a time.
+- **Open an issue first** for anything that changes:
+  - the skill in `skills/`. It ships to every host (Claude, Codex,
+    Antigravity), so a change for one host changes default behaviour for all
+    of them.
+  - a security boundary: allowed path roots, permission or Full Disk Access
+    handling, or any check on what the server may read, write or send.
+
+  Agree the approach in the issue before writing the code.
+
+- **AI-assisted PRs are welcome, and you own the diff.** Green CI is not
+  evidence that a change is right. Say how you verified it against real data,
+  and keep each PR to one concern.
 
 ## Pull Request Process
 
