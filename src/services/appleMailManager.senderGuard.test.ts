@@ -160,7 +160,10 @@ describe("sender guard on AppleScript compose", () => {
     // A visible draft is closed only after Drafts shows it, never straight after `save`.
     const draft = scripts[0];
     const save = draft.indexOf("save newMessage");
-    const confirm = draft.indexOf("messages of drafts mailbox whose subject is draftSubject", save);
+    const confirm = draft.indexOf(
+      "messages of drafts mailbox whose subject is draftSubject)",
+      save
+    );
     const close = draft.indexOf("close newMessage saving yes");
     expect(save).toBeGreaterThan(-1);
     expect(confirm).toBeGreaterThan(save);

@@ -127,3 +127,33 @@ describe("AppleScript reply/forward with attachments (#267)", () => {
     expect(h.calls).toHaveLength(0);
   });
 });
+
+describe("reply/forward drafts close only once Drafts has them (#312)", () => {
+  it.each([
+    ["reply", "theReply", (m: AppleMailManager) => m.replyToMessage("42", "b", false, false)],
+    [
+      "forward",
+      "theForward",
+      (m: AppleMailManager) => m.forwardMessage("42", ["a@example.com"], "b", false),
+    ],
+  ])("%s: save, then the Drafts check, then close", (_verb, v, call) => {
+    expect(call(new AppleMailManager()).success).toBe(true);
+    const { script } = h.calls[0];
+    const [save, confirm, close] = order(
+      script,
+      `save ${v}`,
+      "messages of drafts mailbox whose subject is draftSubject)",
+      `close ${v} saving yes`
+    );
+    expect(
+      script.indexOf("messages of drafts mailbox whose subject is draftSubject)", save)
+    ).toBeGreaterThan(save);
+    expect(confirm).toBeLessThan(save); // the prior count is taken before saving…
+    expect(close).toBeGreaterThan(script.lastIndexOf("draftSubject")); // …and close follows the last check
+  });
+
+  it("send: no Drafts check at all", () => {
+    new AppleMailManager().replyToMessage("42", "b", false, true);
+    expect(h.calls[0].script).not.toContain("drafts mailbox");
+  });
+});

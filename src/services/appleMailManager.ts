@@ -834,26 +834,41 @@ function attachmentSettleBlock(msgVar: string, expected: number): string {
 const DRAFT_SAVE_CONFIRM_TIMEOUT_S = 10;
 
 /**
- * AppleScript that saves the visible compose `msgVar` as a draft and closes it
- * only once the draft is in Drafts (#312).
+ * AppleScript that saves the compose `msgVar` as a draft and closes it only
+ * once the save has landed in Drafts (#312). Used by create-draft, and by
+ * reply/forward with `send: false`.
  *
  * `save` on a visible compose returns before the draft is committed, and a
  * `close` issued straight after it discards the draft while the tool reports
- * success: live on macOS 27 / Mail 16, 2 of 5 drafts vanished that way, and 0
- * of 5 survived `close saving yes` with no `save` at all. Waiting until Drafts
- * holds one more message with this subject than before the save kept 11 of 11.
- * If that never happens within the timeout the compose window is left open
+ * success. Live on macOS 27 / Mail 16: create-draft lost 2 of 5, reply 1 of 6
+ * and forward 3 of 6 that way (reply/forward compose objects are visible even
+ * `without opening window`), and 0 of 5 survived `close saving yes` with no
+ * `save` at all.
+ *
+ * "Landed" means a draft with this subject whose id was not in Drafts before
+ * the save. Counting drafts is not enough: once a reply's sender is set, Mail
+ * autosaves it before our `save`, and the save then REPLACES that draft under
+ * a new id, so the count never grows. A fresh id is the one signal both cases
+ * share. If it does not appear within the timeout, the compose is left open
  * rather than closed, so the user still has the draft, and the call fails.
  */
 function draftSaveBlock(msgVar: string): string {
+  const ids = "id of (messages of drafts mailbox whose subject is draftSubject)";
   return `
         set draftSubject to subject of ${msgVar}
-        set priorDrafts to count of (messages of drafts mailbox whose subject is draftSubject)
+        set priorDraftIds to ${ids}
         save ${msgVar}
         set saveDeadline to (current date) + ${DRAFT_SAVE_CONFIRM_TIMEOUT_S}
-        repeat until (count of (messages of drafts mailbox whose subject is draftSubject)) > priorDrafts
-          if (current date) > saveDeadline then return "error:Mail did not confirm the draft in Drafts within ${DRAFT_SAVE_CONFIRM_TIMEOUT_S}s; its compose window was left open so the draft is not lost."
-          delay 0.1
+        set draftSaved to false
+        repeat until draftSaved
+          set nowDraftIds to ${ids}
+          repeat with draftId in nowDraftIds
+            if priorDraftIds does not contain (contents of draftId) then set draftSaved to true
+          end repeat
+          if not draftSaved then
+            if (current date) > saveDeadline then return "error:Mail did not confirm the draft in Drafts within ${DRAFT_SAVE_CONFIRM_TIMEOUT_S}s; its compose window was left open so the draft is not lost."
+            delay 0.1
+          end if
         end repeat
         close ${msgVar} saving yes`;
 }
@@ -4463,11 +4478,9 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
   ): { success: boolean; error?: string } {
     const safeBody = escapeForAppleScriptBody(body);
     const replyAllClause = replyAll ? " with reply to all" : "";
-    // Mail can show a compose window even for `without opening window`.
-    // Save before closing so the draft remains available in Drafts.
-    const finalAction = send
-      ? "send theReply"
-      : "save theReply\n          close theReply saving yes";
+    // The reply is a visible compose even `without opening window`, so a draft
+    // is saved and closed only once Drafts has it (draftSaveBlock, #312).
+    const finalAction = send ? "send theReply" : draftSaveBlock("theReply");
 
     const mat = materializeAttachments(attachments);
     try {
@@ -4506,10 +4519,8 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
     attachments?: AttachmentInput[]
   ): { success: boolean; error?: string } {
     const safeBody = body ? escapeForAppleScriptBody(body) : "";
-    // See replyToMessage: save the draft and close any compose window Mail opens.
-    const finalAction = send
-      ? "send theForward"
-      : "save theForward\n          close theForward saving yes";
+    // See replyToMessage: a draft is closed only once Drafts has it.
+    const finalAction = send ? "send theForward" : draftSaveBlock("theForward");
 
     // Build recipient additions
     let recipientCommands = "";
