@@ -1,5 +1,25 @@
 ## [Unreleased]
 
+## [2.20.34] - 2026-10-26
+
+### Fixed
+
+- **A draft deleted after `create-draft` no longer comes back** (#312). The
+  AppleScript compose built the draft as an invisible outgoing message, which
+  no `close` or `delete` releases: it stayed in Mail's `outgoing messages`
+  until Mail quit, and autosaved into Drafts again after the user (or an
+  agent) had deleted the draft. `create-draft` now composes visible, like
+  `send-email` already did, so closing the compose releases it. The visible
+  compose window flashes for a fraction of a second and does not take focus.
+  A wrong-account draft refused by the sender guard is now discarded for real
+  too, instead of lingering to be autosaved later.
+- `create-draft` now closes the compose only after the draft is in Drafts. On
+  a visible compose, `save` returns before the draft is committed, and an
+  immediate close discarded it while the tool still reported success (2 of 5
+  drafts lost in live testing; 11 of 11 kept with the wait). If Mail does not
+  confirm the draft within 10 seconds, the call fails and the compose window
+  is left open so the draft is not lost.
+
 ## [2.20.33] - 2026-10-26
 
 ### Added

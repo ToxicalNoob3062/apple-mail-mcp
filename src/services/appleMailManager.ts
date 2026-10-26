@@ -830,6 +830,34 @@ function attachmentSettleBlock(msgVar: string, expected: number): string {
         delay ${ATTACHMENT_SETTLE_GRACE_S}`;
 }
 
+/** How long a draft save may take to show up in Drafts before create-draft gives up. */
+const DRAFT_SAVE_CONFIRM_TIMEOUT_S = 10;
+
+/**
+ * AppleScript that saves the visible compose `msgVar` as a draft and closes it
+ * only once the draft is in Drafts (#312).
+ *
+ * `save` on a visible compose returns before the draft is committed, and a
+ * `close` issued straight after it discards the draft while the tool reports
+ * success: live on macOS 27 / Mail 16, 2 of 5 drafts vanished that way, and 0
+ * of 5 survived `close saving yes` with no `save` at all. Waiting until Drafts
+ * holds one more message with this subject than before the save kept 11 of 11.
+ * If that never happens within the timeout the compose window is left open
+ * rather than closed, so the user still has the draft, and the call fails.
+ */
+function draftSaveBlock(msgVar: string): string {
+  return `
+        set draftSubject to subject of ${msgVar}
+        set priorDrafts to count of (messages of drafts mailbox whose subject is draftSubject)
+        save ${msgVar}
+        set saveDeadline to (current date) + ${DRAFT_SAVE_CONFIRM_TIMEOUT_S}
+        repeat until (count of (messages of drafts mailbox whose subject is draftSubject)) > priorDrafts
+          if (current date) > saveDeadline then return "error:Mail did not confirm the draft in Drafts within ${DRAFT_SAVE_CONFIRM_TIMEOUT_S}s; its compose window was left open so the draft is not lost."
+          delay 0.1
+        end repeat
+        close ${msgVar} saving yes`;
+}
+
 /** Number of files a `buildAttachmentCommands` string attaches. */
 function countAttachmentCommands(commands: string): number {
   return (commands.match(/make new attachment/g) || []).length;
@@ -4209,6 +4237,14 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
    * any attachments to load (attachmentSettleBlock), verify the sender before
    * the message leaves, and report the sender Mail actually used. A draft is
    * saved and closed explicitly rather than left to Mail's autosave (#293).
+   *
+   * Both modes compose with `visible:true`. A `visible:false` outgoing message
+   * has no compose window, so neither `close` nor `delete` releases it: it
+   * stays in `outgoing messages` until Mail quits and autosaves into Drafts
+   * later, bringing back a draft the user already deleted (#312). A visible
+   * one is released by `close`/`delete` — the cost is a compose window that
+   * flashes for a fraction of a second, without taking focus — but must not be
+   * closed before its draft is committed (draftSaveBlock).
    */
   private composeWithCommands(
     mode: "send" | "draft",
@@ -4224,14 +4260,14 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
 
     const prefix = mode === "send" ? SENT_PREFIX : DRAFT_PREFIX;
     const script = buildAppLevelScript(`
-        set newMessage to make new outgoing message with properties {subject:"${safeSubject}", content:"${safeBody}", visible:${mode === "send"}}
+        set newMessage to make new outgoing message with properties {subject:"${safeSubject}", content:"${safeBody}", visible:true}
         tell newMessage
           ${recipientCommands}
           ${sender.setSender}
           ${attachmentCommands}
         end tell${settle}
         ${sender.guard}
-        ${mode === "send" ? "send newMessage" : "save newMessage\n        close newMessage saving yes"}
+        ${mode === "send" ? "send newMessage" : draftSaveBlock("newMessage")}
         return "${prefix}" & actualSender
       `);
     // Exactly one attempt. `executeAppleScript` retries on a timeout, and a
