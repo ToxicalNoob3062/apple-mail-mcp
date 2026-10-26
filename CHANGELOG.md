@@ -1,5 +1,23 @@
 ## [Unreleased]
 
+## [2.20.35] - 2026-10-26
+
+### Fixed
+
+- **`reply-to-message` and `forward-message` with `send: false` could lose the
+  draft while reporting success** (#312 follow-up). Their compose objects are
+  visible even `without opening window`, so they had the same race 2.20.34
+  fixed for `create-draft`: `save` returns before the draft is committed, and
+  the `close` straight after it discarded it. Live, 1 of 6 reply drafts and 3
+  of 6 forward drafts vanished. Both now close only after the save has landed
+  in Drafts, as `create-draft` does. 12 of 12 were kept live, half of them
+  replacing an existing draft of the same message.
+- **2.20.34's save confirmation now looks for a new draft id, not a higher
+  count.** Once a reply's sender is set, Mail autosaves it before the explicit
+  `save`, which then replaces that draft under a new id, so a count of drafts
+  with the subject never grows. A draft id that was not in Drafts before the
+  save covers both that case and a fresh compose.
+
 ## [2.20.34] - 2026-10-26
 
 ### Fixed

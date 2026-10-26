@@ -99520,14 +99520,22 @@ function attachmentSettleBlock(msgVar, expected) {
 }
 var DRAFT_SAVE_CONFIRM_TIMEOUT_S = 10;
 function draftSaveBlock(msgVar) {
+  const ids = "id of (messages of drafts mailbox whose subject is draftSubject)";
   return `
         set draftSubject to subject of ${msgVar}
-        set priorDrafts to count of (messages of drafts mailbox whose subject is draftSubject)
+        set priorDraftIds to ${ids}
         save ${msgVar}
         set saveDeadline to (current date) + ${DRAFT_SAVE_CONFIRM_TIMEOUT_S}
-        repeat until (count of (messages of drafts mailbox whose subject is draftSubject)) > priorDrafts
-          if (current date) > saveDeadline then return "error:Mail did not confirm the draft in Drafts within ${DRAFT_SAVE_CONFIRM_TIMEOUT_S}s; its compose window was left open so the draft is not lost."
-          delay 0.1
+        set draftSaved to false
+        repeat until draftSaved
+          set nowDraftIds to ${ids}
+          repeat with draftId in nowDraftIds
+            if priorDraftIds does not contain (contents of draftId) then set draftSaved to true
+          end repeat
+          if not draftSaved then
+            if (current date) > saveDeadline then return "error:Mail did not confirm the draft in Drafts within ${DRAFT_SAVE_CONFIRM_TIMEOUT_S}s; its compose window was left open so the draft is not lost."
+            delay 0.1
+          end if
         end repeat
         close ${msgVar} saving yes`;
 }
@@ -102113,7 +102121,7 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
   replyToMessage(id, body, replyAll = false, send = true, attachments) {
     const safeBody = escapeForAppleScriptBody(body);
     const replyAllClause = replyAll ? " with reply to all" : "";
-    const finalAction = send ? "send theReply" : "save theReply\n          close theReply saving yes";
+    const finalAction = send ? "send theReply" : draftSaveBlock("theReply");
     const mat = materializeAttachments(attachments);
     try {
       const script = this.findMessageScript(
@@ -102142,7 +102150,7 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
    */
   forwardMessage(id, to, body, send = true, attachments) {
     const safeBody = body ? escapeForAppleScriptBody(body) : "";
-    const finalAction = send ? "send theForward" : "save theForward\n          close theForward saving yes";
+    const finalAction = send ? "send theForward" : draftSaveBlock("theForward");
     let recipientCommands = "";
     for (const addr of to) {
       recipientCommands += `make new to recipient at end of to recipients of theForward with properties {address:"${escapeForAppleScript(addr)}"}
