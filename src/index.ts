@@ -102,6 +102,8 @@ import {
   successResponse,
   errorResponse,
   partialCoverageBlock,
+  searchBackendInfo,
+  type SearchBackendInfo,
   withErrorHandling,
   currentCallTiming,
   messageSummary,
@@ -232,6 +234,10 @@ const LIST_OUTPUT_SCHEMA = {
   // and why. Non-empty implies `partial: true`.
   timedOutMailboxes: z.array(z.string()).optional(),
   stoppedBy: z.enum(["deadline", "cancelled"]).optional(),
+  // Which backend answered the non-IMAP accounts' header search (#342).
+  // "mixed" comes with per-account detail in backendByAccount.
+  backend: z.enum(["envelope-index", "applescript", "mixed"]).optional(),
+  backendByAccount: z.record(z.string(), z.enum(["envelope-index", "applescript"])).optional(),
 };
 
 /** Shape returned by the batch count tools. */
@@ -332,6 +338,17 @@ function mergeDiagnostics(a: SearchDiagnostics, b: SearchDiagnostics): SearchDia
     timedOutAccounts: [...a.timedOutAccounts, ...b.timedOutAccounts],
     skippedLargeMailboxes: [...a.skippedLargeMailboxes, ...b.skippedLargeMailboxes],
     notSearchedMailboxes: [...a.notSearchedMailboxes, ...b.notSearchedMailboxes],
+    ...(a.backendByAccount || b.backendByAccount
+      ? { backendByAccount: { ...a.backendByAccount, ...b.backendByAccount } }
+      : {}),
+  };
+}
+
+/** structuredContent fields for a search's backend (#342). */
+function backendFields(info: SearchBackendInfo) {
+  return {
+    backend: info.backend,
+    ...(info.backendByAccount ? { backendByAccount: info.backendByAccount } : {}),
   };
 }
 
@@ -402,6 +419,11 @@ function mergedMessageResponse(
     timedOutAccounts: [...apple.diagnostics.timedOutAccounts, ...fan.accountsFailed],
     notSearchedMailboxes: [...apple.diagnostics.notSearchedMailboxes, ...fan.failedMailboxes],
   };
+  // #342: name the backend only when the Envelope Index tagged the AppleScript
+  // side; otherwise the merged response is unchanged.
+  const backendInfo = apple.diagnostics.backendByAccount
+    ? searchBackendInfo(apple.diagnostics)
+    : null;
   const structured = {
     messages: merged,
     count: merged.length,
@@ -418,6 +440,7 @@ function mergedMessageResponse(
           stoppedBy: stoppedByDeadline(stopSignal) ? ("deadline" as const) : ("cancelled" as const),
         }
       : {}),
+    ...(backendInfo ? backendFields(backendInfo) : {}),
   };
   const coverageBlock =
     partialCoverageBlock(diagnostics) +
@@ -435,7 +458,7 @@ function mergedMessageResponse(
   if (apple.rows.length > 0) parts.push("AppleScript");
   const accountsNote = parts.length > 0 ? ` (merged across ${parts.join(" + ")})` : "";
   return successResponse(
-    `Found ${merged.length} message(s)${accountsNote}:\n${formatMergedRows(merged)}${coverageBlock}`,
+    `Found ${merged.length} message(s)${accountsNote}${backendInfo?.note ?? ""}:\n${formatMergedRows(merged)}${coverageBlock}`,
     structured
   );
 }
@@ -752,6 +775,7 @@ registerTool(
         );
 
         const coverageBlock = partialCoverageBlock(diagnostics);
+        const backendInfo = searchBackendInfo(diagnostics);
         const structured = {
           messages: messages.map(messageSummary),
           count: messages.length,
@@ -759,13 +783,14 @@ registerTool(
           skippedLargeMailboxes: diagnostics.skippedLargeMailboxes,
           notSearchedMailboxes: diagnostics.notSearchedMailboxes,
           timedOutAccounts: diagnostics.timedOutAccounts,
+          ...backendFields(backendInfo),
         };
 
         if (messages.length === 0) {
           const base = diagnostics.partial
             ? "No messages found in the portions that were searched."
             : "No messages found matching criteria";
-          return successResponse(`${base}${coverageBlock}`, structured);
+          return successResponse(`${base}${backendInfo.note}${coverageBlock}`, structured);
         }
 
         const messageList = messages
@@ -776,7 +801,7 @@ registerTool(
           .join("\n");
 
         return successResponse(
-          `Found ${messages.length} message(s):\n${messageList}${coverageBlock}`,
+          `Found ${messages.length} message(s)${backendInfo.note}:\n${messageList}${coverageBlock}`,
           structured
         );
       }

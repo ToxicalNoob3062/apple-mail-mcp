@@ -7,7 +7,7 @@
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createSerialGate } from "@/utils/serialize.js";
-import type { SearchDiagnostics, Message } from "@/types.js";
+import type { SearchBackend, SearchDiagnostics, Message } from "@/types.js";
 
 /**
  * Plain, JSON-friendly summary of a Message for `structuredContent` (A1) — dates
@@ -95,6 +95,33 @@ export type ToolResponse = ReturnType<typeof successResponse> | ReturnType<typeo
  * never mistakes an incomplete scan for a confirmed "no matches" (#24/#29).
  * Returns "" when coverage was complete.
  */
+export interface SearchBackendInfo {
+  /** The backend that answered, or "mixed" when accounts were answered differently. */
+  backend: SearchBackend | "mixed";
+  /** Per-account detail, present only for "mixed". */
+  backendByAccount?: Record<string, SearchBackend>;
+  /** Text for the summary line, e.g. " [backend: envelope-index]"; "" when untagged. */
+  note: string;
+}
+
+/**
+ * Report which backend answered a non-IMAP header search (#342). Untagged
+ * diagnostics (Envelope Index off) mean AppleScript answered everything, and the
+ * summary line is left unchanged.
+ */
+export function searchBackendInfo(diagnostics: SearchDiagnostics): SearchBackendInfo {
+  const byAccount = diagnostics.backendByAccount ?? {};
+  const entries = Object.entries(byAccount);
+  if (entries.length === 0) return { backend: "applescript", note: "" };
+  const kinds = new Set(entries.map(([, b]) => b));
+  if (kinds.size === 1) {
+    const [only] = kinds;
+    return { backend: only, note: ` [backend: ${only}]` };
+  }
+  const detail = entries.map(([acct, b]) => `${acct}: ${b}`).join(", ");
+  return { backend: "mixed", backendByAccount: byAccount, note: ` [backend: ${detail}]` };
+}
+
 export function partialCoverageBlock(diagnostics: SearchDiagnostics): string {
   const notes: string[] = [];
   if (diagnostics.timedOutAccounts.length > 0) {

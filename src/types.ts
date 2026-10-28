@@ -99,7 +99,16 @@ export interface SearchDiagnostics {
    * "Account / Mailbox".
    */
   notSearchedMailboxes: string[];
+  /**
+   * Which backend answered each searched account. Recorded only while the
+   * opt-in Envelope Index is enabled (#342); absent means every account was
+   * answered by AppleScript.
+   */
+  backendByAccount?: Record<string, SearchBackend>;
 }
+
+/** Backend that answered a non-IMAP account's header search (#342). */
+export type SearchBackend = "envelope-index" | "applescript";
 
 /**
  * A search result paired with diagnostics about coverage.

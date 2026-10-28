@@ -16,8 +16,8 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { messageSummary } from "./respond.js";
-import type { Message } from "@/types.js";
+import { messageSummary, searchBackendInfo } from "./respond.js";
+import type { Message, SearchDiagnostics } from "@/types.js";
 
 function baseMessage(dateReceived: Date): Message {
   return {
@@ -47,5 +47,34 @@ describe("messageSummary", () => {
     expect(Number.isNaN(invalid.getTime())).toBe(true);
     expect(() => messageSummary(baseMessage(invalid))).not.toThrow();
     expect(messageSummary(baseMessage(invalid)).dateReceived).toBe("");
+  });
+});
+
+describe("searchBackendInfo (#342)", () => {
+  const diag = (backendByAccount?: SearchDiagnostics["backendByAccount"]): SearchDiagnostics => ({
+    partial: false,
+    timedOutAccounts: [],
+    skippedLargeMailboxes: [],
+    notSearchedMailboxes: [],
+    ...(backendByAccount ? { backendByAccount } : {}),
+  });
+
+  it("reports applescript, with no summary note, when untagged (index off)", () => {
+    expect(searchBackendInfo(diag())).toEqual({ backend: "applescript", note: "" });
+  });
+
+  it("names a single backend in the summary note", () => {
+    expect(searchBackendInfo(diag({ Google: "envelope-index", Work: "envelope-index" }))).toEqual({
+      backend: "envelope-index",
+      note: " [backend: envelope-index]",
+    });
+  });
+
+  it("reports mixed backends per account", () => {
+    expect(searchBackendInfo(diag({ Google: "envelope-index", Work: "applescript" }))).toEqual({
+      backend: "mixed",
+      backendByAccount: { Google: "envelope-index", Work: "applescript" },
+      note: " [backend: Google: envelope-index, Work: applescript]",
+    });
   });
 });

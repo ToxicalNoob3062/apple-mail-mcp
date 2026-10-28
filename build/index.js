@@ -9337,7 +9337,7 @@ var require_thread_stream = __commonJS({
     var { version: version4 } = require_package();
     var { EventEmitter: EventEmitter7 } = __require("events");
     var { Worker } = __require("worker_threads");
-    var { join: join8 } = __require("path");
+    var { join: join10 } = __require("path");
     var { pathToFileURL } = __require("url");
     var { wait } = require_wait();
     var {
@@ -9388,7 +9388,7 @@ var require_thread_stream = __commonJS({
     function createWorker(stream, opts) {
       const { filename, workerData } = opts;
       const bundlerOverrides = "__bundlerPathsOverrides" in globalThis ? globalThis.__bundlerPathsOverrides : {};
-      const toExecute = bundlerOverrides["thread-stream-worker"] || join8(__dirname, "lib", "worker.js");
+      const toExecute = bundlerOverrides["thread-stream-worker"] || join10(__dirname, "lib", "worker.js");
       const worker = new Worker(toExecute, {
         ...opts.workerOpts,
         name: opts.workerOpts?.name || "thread-stream",
@@ -9854,9 +9854,9 @@ var require_transport = __commonJS({
   "node_modules/.pnpm/pino@10.3.1/node_modules/pino/lib/transport.js"(exports, module) {
     "use strict";
     var { createRequire: createRequire2 } = __require("module");
-    var { existsSync: existsSync5 } = __require("node:fs");
+    var { existsSync: existsSync7 } = __require("node:fs");
     var getCallers = require_caller();
-    var { join: join8, isAbsolute: isAbsolute2, sep: sep3 } = __require("node:path");
+    var { join: join10, isAbsolute: isAbsolute2, sep: sep3 } = __require("node:path");
     var { fileURLToPath } = __require("node:url");
     var sleep2 = require_atomic_sleep();
     var onExit = require_on_exit_leak_free();
@@ -9928,7 +9928,7 @@ var require_transport = __commonJS({
           return false;
         }
       }
-      return isAbsolute2(path3) && !existsSync5(path3);
+      return isAbsolute2(path3) && !existsSync7(path3);
     }
     function stripQuotes(value) {
       const first = value[0];
@@ -10009,7 +10009,7 @@ var require_transport = __commonJS({
         throw new Error("only one of target or targets can be specified");
       }
       if (targets) {
-        target = bundlerOverrides["pino-worker"] || join8(__dirname, "worker.js");
+        target = bundlerOverrides["pino-worker"] || join10(__dirname, "worker.js");
         options.targets = targets.filter((dest) => dest.target).map((dest) => {
           return {
             ...dest,
@@ -10027,7 +10027,7 @@ var require_transport = __commonJS({
           });
         });
       } else if (pipeline3) {
-        target = bundlerOverrides["pino-worker"] || join8(__dirname, "worker.js");
+        target = bundlerOverrides["pino-worker"] || join10(__dirname, "worker.js");
         options.pipelines = [pipeline3.map((dest) => {
           return {
             ...dest,
@@ -10050,7 +10050,7 @@ var require_transport = __commonJS({
           return origin;
         }
         if (origin === "pino/file") {
-          return join8(__dirname, "..", "file.js");
+          return join10(__dirname, "..", "file.js");
         }
         let fixTarget2;
         for (const filePath of callers) {
@@ -11030,7 +11030,7 @@ var require_safe_stable_stringify = __commonJS({
               return circularValue;
             }
             let res = "";
-            let join8 = ",";
+            let join10 = ",";
             const originalIndentation = indentation;
             if (Array.isArray(value)) {
               if (value.length === 0) {
@@ -11044,7 +11044,7 @@ var require_safe_stable_stringify = __commonJS({
                 indentation += spacer;
                 res += `
 ${indentation}`;
-                join8 = `,
+                join10 = `,
 ${indentation}`;
               }
               const maximumValuesToStringify = Math.min(value.length, maximumBreadth);
@@ -11052,13 +11052,13 @@ ${indentation}`;
               for (; i < maximumValuesToStringify - 1; i++) {
                 const tmp2 = stringifyFnReplacer(String(i), value, stack, replacer, spacer, indentation);
                 res += tmp2 !== void 0 ? tmp2 : "null";
-                res += join8;
+                res += join10;
               }
               const tmp = stringifyFnReplacer(String(i), value, stack, replacer, spacer, indentation);
               res += tmp !== void 0 ? tmp : "null";
               if (value.length - 1 > maximumBreadth) {
                 const removedKeys = value.length - maximumBreadth - 1;
-                res += `${join8}"... ${getItemCount(removedKeys)} not stringified"`;
+                res += `${join10}"... ${getItemCount(removedKeys)} not stringified"`;
               }
               if (spacer !== "") {
                 res += `
@@ -11079,7 +11079,7 @@ ${originalIndentation}`;
             let separator = "";
             if (spacer !== "") {
               indentation += spacer;
-              join8 = `,
+              join10 = `,
 ${indentation}`;
               whitespace = " ";
             }
@@ -11093,13 +11093,13 @@ ${indentation}`;
               const tmp = stringifyFnReplacer(key2, value, stack, replacer, spacer, indentation);
               if (tmp !== void 0) {
                 res += `${separator}${strEscape(key2)}:${whitespace}${tmp}`;
-                separator = join8;
+                separator = join10;
               }
             }
             if (keyLength > maximumBreadth) {
               const removedKeys = keyLength - maximumBreadth;
               res += `${separator}"...":${whitespace}"${getItemCount(removedKeys)} not stringified"`;
-              separator = join8;
+              separator = join10;
             }
             if (spacer !== "" && separator.length > 1) {
               res = `
@@ -11140,7 +11140,7 @@ ${originalIndentation}`;
             }
             const originalIndentation = indentation;
             let res = "";
-            let join8 = ",";
+            let join10 = ",";
             if (Array.isArray(value)) {
               if (value.length === 0) {
                 return "[]";
@@ -11153,7 +11153,7 @@ ${originalIndentation}`;
                 indentation += spacer;
                 res += `
 ${indentation}`;
-                join8 = `,
+                join10 = `,
 ${indentation}`;
               }
               const maximumValuesToStringify = Math.min(value.length, maximumBreadth);
@@ -11161,13 +11161,13 @@ ${indentation}`;
               for (; i < maximumValuesToStringify - 1; i++) {
                 const tmp2 = stringifyArrayReplacer(String(i), value[i], stack, replacer, spacer, indentation);
                 res += tmp2 !== void 0 ? tmp2 : "null";
-                res += join8;
+                res += join10;
               }
               const tmp = stringifyArrayReplacer(String(i), value[i], stack, replacer, spacer, indentation);
               res += tmp !== void 0 ? tmp : "null";
               if (value.length - 1 > maximumBreadth) {
                 const removedKeys = value.length - maximumBreadth - 1;
-                res += `${join8}"... ${getItemCount(removedKeys)} not stringified"`;
+                res += `${join10}"... ${getItemCount(removedKeys)} not stringified"`;
               }
               if (spacer !== "") {
                 res += `
@@ -11180,7 +11180,7 @@ ${originalIndentation}`;
             let whitespace = "";
             if (spacer !== "") {
               indentation += spacer;
-              join8 = `,
+              join10 = `,
 ${indentation}`;
               whitespace = " ";
             }
@@ -11189,7 +11189,7 @@ ${indentation}`;
               const tmp = stringifyArrayReplacer(key2, value[key2], stack, replacer, spacer, indentation);
               if (tmp !== void 0) {
                 res += `${separator}${strEscape(key2)}:${whitespace}${tmp}`;
-                separator = join8;
+                separator = join10;
               }
             }
             if (spacer !== "" && separator.length > 1) {
@@ -11247,20 +11247,20 @@ ${originalIndentation}`;
               indentation += spacer;
               let res2 = `
 ${indentation}`;
-              const join9 = `,
+              const join11 = `,
 ${indentation}`;
               const maximumValuesToStringify = Math.min(value.length, maximumBreadth);
               let i = 0;
               for (; i < maximumValuesToStringify - 1; i++) {
                 const tmp2 = stringifyIndent(String(i), value[i], stack, spacer, indentation);
                 res2 += tmp2 !== void 0 ? tmp2 : "null";
-                res2 += join9;
+                res2 += join11;
               }
               const tmp = stringifyIndent(String(i), value[i], stack, spacer, indentation);
               res2 += tmp !== void 0 ? tmp : "null";
               if (value.length - 1 > maximumBreadth) {
                 const removedKeys = value.length - maximumBreadth - 1;
-                res2 += `${join9}"... ${getItemCount(removedKeys)} not stringified"`;
+                res2 += `${join11}"... ${getItemCount(removedKeys)} not stringified"`;
               }
               res2 += `
 ${originalIndentation}`;
@@ -11276,16 +11276,16 @@ ${originalIndentation}`;
               return '"[Object]"';
             }
             indentation += spacer;
-            const join8 = `,
+            const join10 = `,
 ${indentation}`;
             let res = "";
             let separator = "";
             let maximumPropertiesToStringify = Math.min(keyLength, maximumBreadth);
             if (isTypedArrayWithEntries(value)) {
-              res += stringifyTypedArray(value, join8, maximumBreadth);
+              res += stringifyTypedArray(value, join10, maximumBreadth);
               keys = keys.slice(value.length);
               maximumPropertiesToStringify -= value.length;
-              separator = join8;
+              separator = join10;
             }
             if (deterministic) {
               keys = sort(keys, comparator);
@@ -11296,13 +11296,13 @@ ${indentation}`;
               const tmp = stringifyIndent(key2, value[key2], stack, spacer, indentation);
               if (tmp !== void 0) {
                 res += `${separator}${strEscape(key2)}: ${tmp}`;
-                separator = join8;
+                separator = join10;
               }
             }
             if (keyLength > maximumBreadth) {
               const removedKeys = keyLength - maximumBreadth;
               res += `${separator}"...": "${getItemCount(removedKeys)} not stringified"`;
-              separator = join8;
+              separator = join10;
             }
             if (separator !== "") {
               res = `
@@ -98733,10 +98733,10 @@ import { spawnSync as spawnSync4 } from "child_process";
 import {
   constants as fsConstants,
   chmodSync,
-  existsSync as existsSync3,
+  existsSync as existsSync5,
   writeFileSync as writeFileSync4,
-  readFileSync as readFileSync3,
-  readdirSync as readdirSync2,
+  readFileSync as readFileSync4,
+  readdirSync as readdirSync4,
   unlinkSync as unlinkSync2,
   copyFileSync,
   renameSync as renameSync2,
@@ -98745,8 +98745,8 @@ import {
   realpathSync as realpathSync2,
   lstatSync
 } from "fs";
-import { resolve as resolve4, sep as sep2, join as join6 } from "path";
-import { homedir as homedir5 } from "os";
+import { resolve as resolve4, sep as sep2, join as join8 } from "path";
+import { homedir as homedir6 } from "os";
 import { randomUUID as randomUUID2 } from "crypto";
 
 // src/utils/applescript.ts
@@ -99827,6 +99827,370 @@ function searchContactsDb(query, opts) {
   return results;
 }
 
+// src/utils/envelopeIndex.ts
+init_mimeParse();
+import { existsSync as existsSync4, readFileSync as readFileSync3, readdirSync as readdirSync3 } from "fs";
+import { join as join7 } from "path";
+import { homedir as homedir5 } from "os";
+
+// src/utils/emlx.ts
+import { existsSync as existsSync3, readdirSync as readdirSync2 } from "fs";
+import { join as join6 } from "path";
+function dataSubdirs(id) {
+  const bucket = Math.floor(id / 1e3);
+  return bucket === 0 ? [] : String(bucket).split("").reverse();
+}
+function emlxCandidates(versionDir, accountId, mailboxPath, id) {
+  const segments = mailboxPath.split("/").filter(Boolean);
+  if (segments.length === 0) return [];
+  const mailboxDir = join6(versionDir, accountId, ...segments.map((s) => `${s}.mbox`));
+  let stores;
+  try {
+    stores = readdirSync2(mailboxDir, { withFileTypes: true }).filter((e) => e.isDirectory() && existsSync3(join6(mailboxDir, e.name, "Data"))).map((e) => join6(mailboxDir, e.name, "Data"));
+  } catch {
+    return [];
+  }
+  if (existsSync3(join6(mailboxDir, "Data"))) stores.push(join6(mailboxDir, "Data"));
+  const sub = dataSubdirs(id);
+  return stores.flatMap((data) => [
+    join6(data, ...sub, "Messages", `${id}.emlx`),
+    join6(data, ...sub, "Messages", `${id}.partial.emlx`)
+  ]);
+}
+function emlxSource(bytes) {
+  const nl = bytes.indexOf(10);
+  if (nl <= 0) return null;
+  const count = Number(bytes.subarray(0, nl).toString("latin1").trim());
+  if (!Number.isInteger(count) || count <= 0) return null;
+  return bytes.subarray(nl + 1, nl + 1 + count).toString("latin1");
+}
+function htmlToText(html) {
+  return html.replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ").replace(/<br\s*\/?>|<\/(p|div|tr|li|h[1-6])>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&quot;/gi, '"').replace(/&#39;/gi, "'").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n\n").trim();
+}
+
+// src/utils/envelopeIndex.ts
+var ENVELOPE_INDEX_ENV = "APPLE_MAIL_MCP_ENVELOPE_INDEX";
+var MAIL_DIR_ENV = "APPLE_MAIL_MCP_MAIL_DIR";
+function isTruthyFlag(value) {
+  return value !== void 0 && /^(1|true|yes|on)$/i.test(value.trim());
+}
+function isEnvelopeIndexEnabled(env = process.env) {
+  return isTruthyFlag(env[ENVELOPE_INDEX_ENV]);
+}
+var sqliteCache;
+function loadSqlite2() {
+  if (sqliteCache !== void 0) return sqliteCache;
+  try {
+    const mod = __require("node:sqlite");
+    sqliteCache = mod && typeof mod.DatabaseSync === "function" ? mod : null;
+  } catch {
+    sqliteCache = null;
+  }
+  return sqliteCache;
+}
+function mailRoot(env = process.env) {
+  const override = env[MAIL_DIR_ENV];
+  if (override && override.trim()) return override.trim();
+  return join7(homedir5(), "Library", "Mail");
+}
+function resolveMailStore(root = mailRoot()) {
+  let entries;
+  try {
+    entries = readdirSync3(root);
+  } catch {
+    return null;
+  }
+  const versions = entries.map((e) => /^V(\d+)$/.exec(e)).filter((m) => m !== null).sort((a, b) => Number(b[1]) - Number(a[1]));
+  for (const v of versions) {
+    const versionDir = join7(root, v[0]);
+    const indexPath = join7(versionDir, "MailData", "Envelope Index");
+    if (existsSync4(indexPath)) return { versionDir, indexPath };
+  }
+  return null;
+}
+function parseMailboxUrl(url2) {
+  const m = /^[a-z][a-z0-9+.-]*:\/\/([^/]+)\/?(.*)$/i.exec(url2);
+  if (!m) return null;
+  let path3 = m[2] ?? "";
+  try {
+    path3 = decodeURIComponent(path3);
+  } catch {
+  }
+  return { accountId: m[1], path: path3.replace(/\/+$/, "") };
+}
+var REQUIRED_COLUMNS = {
+  messages: [
+    "ROWID",
+    "subject",
+    "sender",
+    "mailbox",
+    "date_received",
+    "read",
+    "flagged",
+    "deleted"
+  ],
+  subjects: ["ROWID", "subject"],
+  addresses: ["ROWID", "address", "comment"],
+  mailboxes: ["ROWID", "url"]
+};
+function columnsOf(db, table) {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all();
+  return new Set(rows.map((r) => String(r.name)));
+}
+function checkSchema(db) {
+  for (const [table, cols] of Object.entries(REQUIRED_COLUMNS)) {
+    const have = columnsOf(db, table);
+    const missing = cols.filter((c) => c !== "ROWID" && !have.has(c));
+    if (have.size === 0) return { mismatch: `table "${table}" not found` };
+    if (missing.length > 0) {
+      return { mismatch: `table "${table}" lacks column(s) ${missing.join(", ")}` };
+    }
+  }
+  const labels = columnsOf(db, "labels");
+  const messages = columnsOf(db, "messages");
+  const attachments = columnsOf(db, "attachments");
+  return {
+    labels: labels.has("message_id") && labels.has("mailbox_id"),
+    subjectPrefix: messages.has("subject_prefix"),
+    dateSent: messages.has("date_sent"),
+    attachments: attachments.has("message")
+  };
+}
+function likePattern(text) {
+  return `%${text.toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+}
+function parseFilterDate(value) {
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  return iso ? new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])) : new Date(value);
+}
+function upperBound(dateTo) {
+  const to = parseFilterDate(dateTo);
+  if (!/\d:\d/.test(dateTo)) to.setHours(23, 59, 59, 999);
+  return to;
+}
+function resolveMailboxIds(db, accountId, mailbox) {
+  const rows = db.prepare(`SELECT ROWID AS id, url FROM mailboxes WHERE url LIKE ?`).all(`%://${accountId}/%`);
+  const wanted = mailbox.replace(/\/+$/, "").toLowerCase();
+  const exact = [];
+  const leaf = [];
+  for (const r of rows) {
+    const parsed = parseMailboxUrl(String(r.url ?? ""));
+    if (!parsed || parsed.accountId !== accountId) continue;
+    const path3 = parsed.path;
+    const lower = path3.toLowerCase();
+    if (lower === wanted) exact.push({ id: Number(r.id), path: path3 });
+    else if (lower.split("/").pop() === wanted) leaf.push({ id: Number(r.id), path: path3 });
+  }
+  if (exact.length > 0) return { ids: exact.map((e) => e.id), path: exact[0].path };
+  if (leaf.length === 1) return { ids: [leaf[0].id], path: leaf[0].path };
+  if (leaf.length > 1) {
+    return {
+      reason: `mailbox "${mailbox}" is ambiguous in the index (${leaf.map((l) => l.path).join(", ")})`
+    };
+  }
+  return { reason: `mailbox "${mailbox}" not found in the index for this account` };
+}
+function toDate(seconds) {
+  const n = Number(seconds);
+  return Number.isFinite(n) && n > 0 ? new Date(n * 1e3) : void 0;
+}
+function searchOpenIndex(db, features, params) {
+  const where = ["m.deleted = 0"];
+  const args = [];
+  let scopedPath;
+  if (params.mailbox !== void 0 && params.mailbox !== "") {
+    const resolved = resolveMailboxIds(db, params.accountId, params.mailbox);
+    if ("reason" in resolved) return { ok: false, reason: resolved.reason };
+    scopedPath = resolved.path;
+    const ids = JSON.stringify(resolved.ids);
+    if (features.labels) {
+      where.push(
+        `(m.mailbox IN (SELECT value FROM json_each(?)) OR m.ROWID IN (SELECT message_id FROM labels WHERE mailbox_id IN (SELECT value FROM json_each(?))))`
+      );
+      args.push(ids, ids);
+    } else {
+      where.push(`m.mailbox IN (SELECT value FROM json_each(?))`);
+      args.push(ids);
+    }
+  } else {
+    where.push(`mb.url LIKE ?`);
+    args.push(`%://${params.accountId}/%`);
+  }
+  const subjectExpr = features.subjectPrefix ? `COALESCE(m.subject_prefix, '') || COALESCE(s.subject, '')` : `COALESCE(s.subject, '')`;
+  const senderExpr = `COALESCE(a.comment, '') || ' <' || COALESCE(a.address, '') || '>'`;
+  if (params.query) {
+    where.push(
+      `(lower(${subjectExpr}) LIKE ? ESCAPE '\\' OR lower(${senderExpr}) LIKE ? ESCAPE '\\')`
+    );
+    args.push(likePattern(params.query), likePattern(params.query));
+  }
+  if (params.subject) {
+    where.push(`lower(${subjectExpr}) LIKE ? ESCAPE '\\'`);
+    args.push(likePattern(params.subject));
+  }
+  if (params.from) {
+    where.push(`lower(${senderExpr}) LIKE ? ESCAPE '\\'`);
+    args.push(likePattern(params.from));
+  }
+  if (params.isRead !== void 0) {
+    where.push(`m.read = ?`);
+    args.push(params.isRead ? 1 : 0);
+  }
+  if (params.isFlagged !== void 0) {
+    where.push(`m.flagged = ?`);
+    args.push(params.isFlagged ? 1 : 0);
+  }
+  if (params.dateFrom) {
+    where.push(`m.date_received >= ?`);
+    args.push(Math.floor(parseFilterDate(params.dateFrom).getTime() / 1e3));
+  }
+  if (params.dateTo) {
+    where.push(`m.date_received <= ?`);
+    args.push(Math.floor(upperBound(params.dateTo).getTime() / 1e3));
+  }
+  if (params.rowIds) {
+    where.push(`m.ROWID IN (SELECT value FROM json_each(?))`);
+    args.push(JSON.stringify(params.rowIds));
+  }
+  const sql = `
+    SELECT m.ROWID AS id,
+           ${subjectExpr} AS subject,
+           a.address AS address,
+           a.comment AS comment,
+           m.date_received AS date_received,
+           ${features.dateSent ? "m.date_sent" : "NULL"} AS date_sent,
+           m.read AS is_read,
+           m.flagged AS is_flagged,
+           mb.url AS url,
+           ${features.attachments ? "EXISTS (SELECT 1 FROM attachments t WHERE t.message = m.ROWID)" : "0"} AS has_attachments
+    FROM messages m
+    LEFT JOIN subjects s ON m.subject = s.ROWID
+    LEFT JOIN addresses a ON m.sender = a.ROWID
+    LEFT JOIN mailboxes mb ON m.mailbox = mb.ROWID
+    WHERE ${where.join(" AND ")}
+    ORDER BY m.date_received DESC
+    LIMIT ?`;
+  args.push(params.limit);
+  const rows = db.prepare(sql).all(...args);
+  return {
+    ok: true,
+    rows: rows.map((r) => {
+      const address = typeof r.address === "string" ? r.address : "";
+      const name2 = typeof r.comment === "string" ? r.comment.trim() : "";
+      const mailboxPath = parseMailboxUrl(String(r.url ?? ""))?.path ?? "";
+      return {
+        id: Number(r.id),
+        subject: typeof r.subject === "string" ? r.subject : "",
+        sender: name2 ? `${name2} <${address}>` : address,
+        ...name2 ? { senderName: name2 } : {},
+        dateReceived: toDate(r.date_received) ?? /* @__PURE__ */ new Date(NaN),
+        ...toDate(r.date_sent) ? { dateSent: toDate(r.date_sent) } : {},
+        isRead: Number(r.is_read) === 1,
+        isFlagged: Number(r.is_flagged) === 1,
+        // A Gmail label hit lives in All Mail; report the mailbox the caller
+        // scoped to, which is where the message shows in Mail.
+        mailbox: scopedPath ?? mailboxPath,
+        hasAttachments: Number(r.has_attachments) === 1
+      };
+    })
+  };
+}
+function searchEnvelopeIndex(params, opts = {}) {
+  const sqlite = opts.sqlite === void 0 ? loadSqlite2() : opts.sqlite;
+  if (!sqlite) return { ok: false, reason: "node:sqlite unavailable (requires Node >= 22.5)" };
+  const indexPath = opts.indexPath ?? resolveMailStore()?.indexPath;
+  if (!indexPath) {
+    return {
+      ok: false,
+      reason: "Envelope Index not readable (grant Full Disk Access to the server's Node runtime)"
+    };
+  }
+  let db = null;
+  try {
+    db = new sqlite.DatabaseSync(indexPath, { readOnly: true });
+    const features = checkSchema(db);
+    if ("mismatch" in features) {
+      return { ok: false, reason: `unexpected Envelope Index schema: ${features.mismatch}` };
+    }
+    return searchOpenIndex(db, features, params);
+  } catch (err) {
+    return {
+      ok: false,
+      reason: `Envelope Index query failed: ${err instanceof Error ? err.message : String(err)}`
+    };
+  } finally {
+    try {
+      db?.close();
+    } catch {
+    }
+  }
+}
+function readMessageFromStore(id, opts = {}) {
+  const sqlite = opts.sqlite === void 0 ? loadSqlite2() : opts.sqlite;
+  if (!sqlite) return { reason: "node:sqlite unavailable (requires Node >= 22.5)" };
+  const store = opts.store === void 0 ? resolveMailStore() : opts.store;
+  if (!store) {
+    return {
+      reason: "Envelope Index not readable (grant Full Disk Access to the server's Node runtime)"
+    };
+  }
+  let db = null;
+  let row;
+  let features;
+  try {
+    db = new sqlite.DatabaseSync(store.indexPath, { readOnly: true });
+    const checked = checkSchema(db);
+    if ("mismatch" in checked)
+      return { reason: `unexpected Envelope Index schema: ${checked.mismatch}` };
+    features = checked;
+    row = db.prepare(
+      `SELECT ${features.subjectPrefix ? "COALESCE(m.subject_prefix, '') || " : ""}COALESCE(s.subject, '') AS subject,
+                m.date_received AS date_received,
+                ${features.dateSent ? "m.date_sent" : "NULL"} AS date_sent,
+                m.deleted AS deleted, mb.url AS url
+         FROM messages m
+         LEFT JOIN subjects s ON m.subject = s.ROWID
+         LEFT JOIN mailboxes mb ON m.mailbox = mb.ROWID
+         WHERE m.ROWID = ?`
+    ).get(id);
+  } catch (err) {
+    return {
+      reason: `Envelope Index query failed: ${err instanceof Error ? err.message : String(err)}`
+    };
+  } finally {
+    try {
+      db?.close();
+    } catch {
+    }
+  }
+  if (!row) return { reason: `message ${id} not in the Envelope Index` };
+  if (Number(row.deleted) === 1) return { reason: `message ${id} is deleted` };
+  const location = parseMailboxUrl(String(row.url ?? ""));
+  if (!location) return { reason: `message ${id} has no mailbox URL` };
+  for (const path3 of emlxCandidates(store.versionDir, location.accountId, location.path, id)) {
+    let bytes;
+    try {
+      bytes = readFileSync3(path3);
+    } catch {
+      continue;
+    }
+    const source = emlxSource(bytes);
+    if (source === null) continue;
+    const html = extractHtmlBody(source);
+    const text = extractTextBody(source) ?? (html !== null ? htmlToText(html) : "");
+    return {
+      subject: typeof row.subject === "string" ? row.subject : "",
+      plainText: text,
+      ...opts.includeHtml && html !== null ? { htmlContent: html } : {},
+      rfcMessageId: extractRfcMessageIdFromSource(source),
+      ...toDate(row.date_sent) ? { dateSent: toDate(row.date_sent) } : {},
+      ...toDate(row.date_received) ? { dateReceived: toDate(row.date_received) } : {},
+      partial: path3.endsWith(".partial.emlx")
+    };
+  }
+  return { reason: `no readable .emlx for message ${id} under ${location.path}` };
+}
+
 // src/services/appleMailManager.ts
 init_auditLog();
 function getMailboxScanThreshold() {
@@ -100052,6 +100416,17 @@ function mergeSearchDiagnostics(into, from) {
   into.skippedLargeMailboxes.push(...from.skippedLargeMailboxes);
   into.notSearchedMailboxes.push(...from.notSearchedMailboxes);
   if (from.partial) into.partial = true;
+  if (from.backendByAccount) {
+    into.backendByAccount = { ...into.backendByAccount, ...from.backendByAccount };
+  }
+}
+function tagBackend(result, account, backend) {
+  if (!isEnvelopeIndexEnabled()) return result;
+  result.diagnostics.backendByAccount = {
+    ...result.diagnostics.backendByAccount,
+    [account]: backend
+  };
+  return result;
 }
 function splitSearchDiagnostics(output2, account) {
   const markerIdx = output2.lastIndexOf(DIAG_MARKER);
@@ -100083,7 +100458,7 @@ function splitSearchDiagnostics(output2, account) {
   }
   return { payload, diagnostics };
 }
-var ALLOWED_SAVE_ROOTS = [homedir5(), "/tmp", "/private/tmp", "/Volumes"];
+var ALLOWED_SAVE_ROOTS = [homedir6(), "/tmp", "/private/tmp", "/Volumes"];
 function isPathWithinAllowedRoots(resolvedPath) {
   return ALLOWED_SAVE_ROOTS.some((root) => {
     const base2 = root.endsWith(sep2) ? root.slice(0, -1) : root;
@@ -100104,7 +100479,7 @@ function resolveAttachmentSaveTarget(savePath, attachmentName) {
   if (!isPathWithinAllowedRoots(savedPath)) {
     throw new Error(`Output path "${savedPath}" is outside allowed directories`);
   }
-  if (existsSync3(savedPath)) {
+  if (existsSync5(savedPath)) {
     if (lstatSync(savedPath).isSymbolicLink()) {
       throw new Error(`Refusing to overwrite symbolic link "${savedPath}"`);
     }
@@ -100590,7 +100965,9 @@ var AppleMailManager = class {
    */
   cache = {
     accounts: null,
-    mailboxNames: /* @__PURE__ */ new Map()
+    mailboxNames: /* @__PURE__ */ new Map(),
+    /** Account name → Mail account id (the host part of its mailbox URLs). */
+    accountIds: null
   };
   /** Cache TTL in milliseconds (60 seconds). */
   CACHE_TTL_MS = 6e4;
@@ -101311,6 +101688,75 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
   invalidateCache() {
     this.cache.accounts = null;
     this.cache.mailboxNames.clear();
+    this.cache.accountIds = null;
+  }
+  /**
+   * Mail's internal id for an account (`id of account`), which is the host part
+   * of every mailbox URL in the Envelope Index. Cached with the account list;
+   * null when Mail can't be asked or has no such account.
+   */
+  getAccountId(account) {
+    const now = Date.now();
+    if (!this.cache.accountIds || now >= this.cache.accountIds.expiry) {
+      const result = executeAppleScript(
+        buildAppLevelScript(`
+      set idList to {}
+      repeat with acct in accounts
+        set end of idList to (name of acct) & "${FIELD_SEP}" & (id of acct)
+      end repeat
+      set AppleScript's text item delimiters to "${RECORD_SEP}"
+      return idList as text
+    `)
+      );
+      if (!result.success) return null;
+      const ids = /* @__PURE__ */ new Map();
+      for (const item of result.output.split(RECORD_SEP)) {
+        const [name2, id] = item.split(FIELD_SEP);
+        if (name2 && id) ids.set(name2.trim(), id.trim());
+      }
+      this.cache.accountIds = { data: ids, expiry: now + this.CACHE_TTL_MS };
+    }
+    return this.cache.accountIds.data.get(account) ?? null;
+  }
+  /**
+   * Opt-in fast path for one account's header search: answer from Mail's Envelope Index instead of an AppleScript
+   * scan. Returns null whenever the index can't answer completely, so the caller
+   * falls back to AppleScript rather than reporting a false empty.
+   */
+  searchViaEnvelopeIndex(account, filters) {
+    if (!isEnvelopeIndexEnabled()) return null;
+    const fallback = (reason) => {
+      console.error(`[envelopeIndex] ${account}: falling back to AppleScript \u2014 ${reason}`);
+      return null;
+    };
+    if (filters.flagColorIndex !== void 0) return fallback("flagColor filter");
+    const accountId = this.getAccountId(account);
+    if (!accountId) return fallback("account id unavailable");
+    const outcome = searchEnvelopeIndex({ accountId, ...filters });
+    if (!outcome.ok) return fallback(outcome.reason);
+    const diagnostics = {
+      partial: false,
+      timedOutAccounts: [],
+      skippedLargeMailboxes: [],
+      notSearchedMailboxes: []
+    };
+    const messages = outcome.rows.map((r) => ({
+      id: String(r.id),
+      subject: r.subject,
+      sender: r.sender,
+      ...r.senderName ? { senderName: r.senderName } : {},
+      recipients: [],
+      dateReceived: r.dateReceived,
+      ...r.dateSent ? { dateSent: r.dateSent } : {},
+      isRead: r.isRead,
+      isFlagged: r.isFlagged,
+      isJunk: false,
+      isDeleted: false,
+      mailbox: r.mailbox,
+      account,
+      hasAttachments: r.hasAttachments
+    }));
+    return { messages, diagnostics };
   }
   /**
    * Reads the live `enabled` flag for an account directly from Mail (bypassing
@@ -101605,6 +102051,21 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
     }
     const local = isLocalStoreLabel(account);
     const targetAccount = local ? LOCAL_STORE_LABEL : this.resolveAccount(account);
+    if (!local) {
+      const fast = this.searchViaEnvelopeIndex(targetAccount, {
+        query,
+        mailbox,
+        limit,
+        dateFrom,
+        dateTo,
+        from,
+        subject,
+        isRead,
+        isFlagged,
+        flagColorIndex
+      });
+      if (fast) return tagBackend(fast, targetAccount, "envelope-index");
+    }
     const mbIter = local ? "_mbs" : "mailboxes";
     const searchCondition = buildSearchCondition({
       query,
@@ -101732,17 +102193,25 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
     const result = executeAppleScript(script, { timeoutMs: SEARCH_ACCOUNT_TIMEOUT_MS });
     if (!result.success) {
       console.error(`Failed to search messages in "${targetAccount}": ${result.error}`);
-      return {
-        messages: [],
-        diagnostics: {
-          partial: true,
-          timedOutAccounts: [targetAccount],
-          skippedLargeMailboxes: [],
-          notSearchedMailboxes: []
-        }
-      };
+      return tagBackend(
+        {
+          messages: [],
+          diagnostics: {
+            partial: true,
+            timedOutAccounts: [targetAccount],
+            skippedLargeMailboxes: [],
+            notSearchedMailboxes: []
+          }
+        },
+        targetAccount,
+        "applescript"
+      );
     }
-    return this.parseSearchResult(result.output, resultMailbox, targetAccount, rowsIncludeMailbox);
+    return tagBackend(
+      this.parseSearchResult(result.output, resultMailbox, targetAccount, rowsIncludeMailbox),
+      targetAccount,
+      "applescript"
+    );
   }
   /**
    * Split a per-account search payload into its message list and the DIAG
@@ -102222,6 +102691,22 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
    */
   getMessageContent(id, includeHtml = false, hint) {
     this.lastMessageLookupError = void 0;
+    if (isEnvelopeIndexEnabled() && /^\d+$/.test(id)) {
+      const stored = readMessageFromStore(Number(id), { includeHtml });
+      if ("reason" in stored) {
+        console.error(`[envelopeIndex] get ${id}: falling back to AppleScript \u2014 ${stored.reason}`);
+      } else {
+        return {
+          id,
+          subject: stored.subject,
+          plainText: stored.plainText,
+          ...stored.htmlContent !== void 0 ? { htmlContent: stored.htmlContent } : {},
+          rfcMessageId: stored.rfcMessageId,
+          ...stored.dateSent ? { dateSent: plausibleDateSent(stored.dateSent, stored.dateReceived) } : {},
+          ...stored.dateReceived ? { dateReceived: stored.dateReceived } : {}
+        };
+      }
+    }
     const sourceFetch = includeHtml ? `set htmlSource to ""
                 try
                   set htmlSource to source of msg
@@ -103858,12 +104343,12 @@ ${this.errorEmit("              ")}
     const safeName = escapeForAppleScript(attachmentName);
     let temporaryDirectory;
     try {
-      temporaryDirectory = mkdtempSync2(join6(target.saveDirectory, ".apple-mail-mcp-"));
+      temporaryDirectory = mkdtempSync2(join8(target.saveDirectory, ".apple-mail-mcp-"));
     } catch (error63) {
       console.error(`Failed to create attachment staging directory: ${error63}`);
       return false;
     }
-    const temporaryPath = join6(temporaryDirectory, "attachment");
+    const temporaryPath = join8(temporaryDirectory, "attachment");
     const safeTemporaryPath = escapeForAppleScript(temporaryPath);
     const cleanupTemporaryDirectory = () => {
       try {
@@ -103946,8 +104431,8 @@ ${this.errorEmit("              ")}
     }
     let mimeTemporaryDirectory;
     try {
-      mimeTemporaryDirectory = mkdtempSync2(join6(target.saveDirectory, ".apple-mail-mcp-"));
-      const mimeTemporaryPath = join6(mimeTemporaryDirectory, "attachment");
+      mimeTemporaryDirectory = mkdtempSync2(join8(target.saveDirectory, ".apple-mail-mcp-"));
+      const mimeTemporaryPath = join8(mimeTemporaryDirectory, "attachment");
       writeFileSync4(mimeTemporaryPath, attachment.data, { flag: "wx", mode: 384 });
       copyFileSync(mimeTemporaryPath, target.savedPath, fsConstants.COPYFILE_EXCL);
       chmodSync(target.savedPath, 384);
@@ -103973,7 +104458,7 @@ ${this.errorEmit("              ")}
     let dir = null;
     try {
       dir = mkdtempSync2("/private/tmp/amcp-fetch-");
-      const dest = join6(dir, attachmentName.replace(/[/\\]/g, "_"));
+      const dest = join8(dir, attachmentName.replace(/[/\\]/g, "_"));
       const ok = this.saveAttachment(id, attachmentName, dir);
       if (!ok) {
         return {
@@ -103981,7 +104466,7 @@ ${this.errorEmit("              ")}
           error: `Attachment "${attachmentName}" not found on message ${id}`
         };
       }
-      const buf = readFileSync3(dest);
+      const buf = readFileSync4(dest);
       return { success: true, base64: buf.toString("base64"), bytes: buf.length };
     } catch (e) {
       return { success: false, error: e instanceof Error ? e.message : String(e) };
@@ -104225,13 +104710,13 @@ ${this.errorEmit("              ")}
   // gives full control over criteria without UI/GUI scripting.
   // ===========================================================================
   findSyncedSmartPlist() {
-    const base2 = join6(homedir5(), "Library", "Mail");
+    const base2 = join8(homedir6(), "Library", "Mail");
     try {
-      const versions = readdirSync2(base2).filter((d) => d.startsWith("V"));
+      const versions = readdirSync4(base2).filter((d) => d.startsWith("V"));
       versions.sort().reverse();
       for (const v of versions) {
-        const p = join6(base2, v, "MailData", "SyncedSmartMailboxes.plist");
-        if (existsSync3(p)) return p;
+        const p = join8(base2, v, "MailData", "SyncedSmartMailboxes.plist");
+        if (existsSync5(p)) return p;
       }
     } catch {
     }
@@ -104249,7 +104734,7 @@ ${this.errorEmit("              ")}
    * existing smart mailbox on the next save.)
    */
   readSmartMailboxEntries(plistPath) {
-    if (!plistPath || !existsSync3(plistPath)) return [];
+    if (!plistPath || !existsSync5(plistPath)) return [];
     const j = spawnSync4("plutil", ["-convert", "json", "-o", "-", plistPath], {
       encoding: "utf8"
     });
@@ -105416,6 +105901,18 @@ function errorResponse(message, structured) {
   if (structured !== void 0) res.structuredContent = structured;
   return res;
 }
+function searchBackendInfo(diagnostics) {
+  const byAccount = diagnostics.backendByAccount ?? {};
+  const entries = Object.entries(byAccount);
+  if (entries.length === 0) return { backend: "applescript", note: "" };
+  const kinds = new Set(entries.map(([, b]) => b));
+  if (kinds.size === 1) {
+    const [only] = kinds;
+    return { backend: only, note: ` [backend: ${only}]` };
+  }
+  const detail = entries.map(([acct, b]) => `${acct}: ${b}`).join(", ");
+  return { backend: "mixed", backendByAccount: byAccount, note: ` [backend: ${detail}]` };
+}
 function partialCoverageBlock(diagnostics) {
   const notes = [];
   if (diagnostics.timedOutAccounts.length > 0) {
@@ -106453,19 +106950,19 @@ var ImapIdleWatcher = class {
 };
 
 // src/services/fileConfig.ts
-import { existsSync as existsSync4, readFileSync as readFileSync4 } from "fs";
-import { join as join7 } from "path";
-import { homedir as homedir6 } from "os";
+import { existsSync as existsSync6, readFileSync as readFileSync5 } from "fs";
+import { join as join9 } from "path";
+import { homedir as homedir7 } from "os";
 function fileConfigPath(env = process.env) {
   const override = env.APPLE_MAIL_MCP_CONFIG_FILE;
   if (override && override.trim()) return override.trim();
-  return join7(homedir6(), "Library", "Application Support", "apple-mail-mcp", "config.json");
+  return join9(homedir7(), "Library", "Application Support", "apple-mail-mcp", "config.json");
 }
 function loadFileConfig(env = process.env, path3 = fileConfigPath(env)) {
   const applied = [];
   try {
-    if (!existsSync4(path3)) return applied;
-    const parsed = JSON.parse(readFileSync4(path3, "utf8"));
+    if (!existsSync6(path3)) return applied;
+    const parsed = JSON.parse(readFileSync5(path3, "utf8"));
     if (!parsed || typeof parsed !== "object") return applied;
     for (const [k, v] of Object.entries(parsed)) {
       if (typeof v !== "string") continue;
@@ -106633,7 +107130,11 @@ var LIST_OUTPUT_SCHEMA = {
   // Mailboxes a cancelled or out-of-time search-messages never finished (#276),
   // and why. Non-empty implies `partial: true`.
   timedOutMailboxes: external_exports.array(external_exports.string()).optional(),
-  stoppedBy: external_exports.enum(["deadline", "cancelled"]).optional()
+  stoppedBy: external_exports.enum(["deadline", "cancelled"]).optional(),
+  // Which backend answered the non-IMAP accounts' header search (#342).
+  // "mixed" comes with per-account detail in backendByAccount.
+  backend: external_exports.enum(["envelope-index", "applescript", "mixed"]).optional(),
+  backendByAccount: external_exports.record(external_exports.string(), external_exports.enum(["envelope-index", "applescript"])).optional()
 };
 var BATCH_COUNT_OUTPUT_SCHEMA = {
   ok: external_exports.boolean().optional(),
@@ -106695,7 +107196,14 @@ function mergeDiagnostics(a, b) {
     partial: a.partial || b.partial,
     timedOutAccounts: [...a.timedOutAccounts, ...b.timedOutAccounts],
     skippedLargeMailboxes: [...a.skippedLargeMailboxes, ...b.skippedLargeMailboxes],
-    notSearchedMailboxes: [...a.notSearchedMailboxes, ...b.notSearchedMailboxes]
+    notSearchedMailboxes: [...a.notSearchedMailboxes, ...b.notSearchedMailboxes],
+    ...a.backendByAccount || b.backendByAccount ? { backendByAccount: { ...a.backendByAccount, ...b.backendByAccount } } : {}
+  };
+}
+function backendFields(info) {
+  return {
+    backend: info.backend,
+    ...info.backendByAccount ? { backendByAccount: info.backendByAccount } : {}
   };
 }
 function appleScanForAccounts(accounts, scan) {
@@ -106717,6 +107225,7 @@ function mergedMessageResponse(fan, apple, limit, verb, stopSignal) {
     timedOutAccounts: [...apple.diagnostics.timedOutAccounts, ...fan.accountsFailed],
     notSearchedMailboxes: [...apple.diagnostics.notSearchedMailboxes, ...fan.failedMailboxes]
   };
+  const backendInfo = apple.diagnostics.backendByAccount ? searchBackendInfo(apple.diagnostics) : null;
   const structured = {
     messages: merged,
     count: merged.length,
@@ -106730,7 +107239,8 @@ function mergedMessageResponse(fan, apple, limit, verb, stopSignal) {
     ...timedOutMailboxes.length > 0 ? {
       timedOutMailboxes,
       stoppedBy: stoppedByDeadline(stopSignal) ? "deadline" : "cancelled"
-    } : {}
+    } : {},
+    ...backendInfo ? backendFields(backendInfo) : {}
   };
   const coverageBlock = partialCoverageBlock(diagnostics) + omittedNote(fan.omittedMessages, true) + stoppedNote(timedOutMailboxes, stopSignal);
   if (merged.length === 0) {
@@ -106743,7 +107253,7 @@ function mergedMessageResponse(fan, apple, limit, verb, stopSignal) {
   if (apple.rows.length > 0) parts.push("AppleScript");
   const accountsNote = parts.length > 0 ? ` (merged across ${parts.join(" + ")})` : "";
   return successResponse(
-    `Found ${merged.length} message(s)${accountsNote}:
+    `Found ${merged.length} message(s)${accountsNote}${backendInfo?.note ?? ""}:
 ${formatMergedRows(merged)}${coverageBlock}`,
     structured
   );
@@ -106941,23 +107451,25 @@ registerTool(
           flagColorIndex
         );
         const coverageBlock = partialCoverageBlock(diagnostics);
+        const backendInfo = searchBackendInfo(diagnostics);
         const structured = {
           messages: messages.map(messageSummary),
           count: messages.length,
           partial: diagnostics.partial,
           skippedLargeMailboxes: diagnostics.skippedLargeMailboxes,
           notSearchedMailboxes: diagnostics.notSearchedMailboxes,
-          timedOutAccounts: diagnostics.timedOutAccounts
+          timedOutAccounts: diagnostics.timedOutAccounts,
+          ...backendFields(backendInfo)
         };
         if (messages.length === 0) {
           const base2 = diagnostics.partial ? "No messages found in the portions that were searched." : "No messages found matching criteria";
-          return successResponse(`${base2}${coverageBlock}`, structured);
+          return successResponse(`${base2}${backendInfo.note}${coverageBlock}`, structured);
         }
         const messageList = messages.map(
           (m) => `  - ID: ${m.id} | ${m.dateReceived.toLocaleDateString()} | ${m.subject} (from: ${m.sender}) [${m.isRead ? "read" : "unread"}]`
         ).join("\n");
         return successResponse(
-          `Found ${messages.length} message(s):
+          `Found ${messages.length} message(s)${backendInfo.note}:
 ${messageList}${coverageBlock}`,
           structured
         );
