@@ -347,6 +347,16 @@ To search inside a large mailbox, scope the call with `mailbox` (and ideally a
 to disable the guard and attempt every mailbox regardless of size).
 ([#24](https://github.com/sweetrb/apple-mail-mcp/issues/24))
 
+**Envelope Index search (opt-in, read-only).** For accounts with no IMAP config,
+set `APPLE_MAIL_MCP_ENVELOPE_INDEX=1` to answer header searches (`query`, `from`,
+`subject`, read/flagged state, dates, mailbox) from Mail's own on-disk Envelope Index
+instead of an AppleScript scan, so large mailboxes are searched completely rather than
+skipped. It needs Full Disk Access for the server's Node runtime and opens the database
+read-only. Anything the index can't answer completely (a `flagColor` filter, an unknown
+mailbox, no Full Disk Access, an unrecognised schema, or a corrupt or locked database)
+falls back to the AppleScript scan. The `backend` field below reports which one answered.
+([#342](https://github.com/sweetrb/apple-mail-mcp/issues/342))
+
 **Coverage diagnostics (structured fields).** The warning above is prose for a
 human reader; the same information is also returned as structured fields on
 `search-messages` and `list-messages`, so a caller can tell _"nothing matched"_
@@ -363,6 +373,8 @@ apart from _"I did not look everywhere"_ without parsing the text:
 | `omittedMessages`       | object[] | IMAP messages that belong on the page but whose `FETCH` response could not be read even with a reduced item set — `{ id, mailbox, uid, reason }`. The page is short by exactly these; the `id` still works with `get-message` / `get-message-headers`. ([#256](https://github.com/sweetrb/apple-mail-mcp/issues/256))                                                                               |
 | `timedOutMailboxes`     | string[] | IMAP mailboxes the search did not finish because the call was **cancelled** (`notifications/cancelled`) or reached its **deadline** (`APPLE_MAIL_MCP_SEARCH_DEADLINE_MS`, default 45s), formatted `"Account / Mailbox"`; an account never reached is `"Account / *"`. Results from the mailboxes that did finish are still returned. ([#276](https://github.com/sweetrb/apple-mail-mcp/issues/276)) |
 | `stoppedBy`             | string   | `"deadline"` or `"cancelled"` — present only with `timedOutMailboxes`.                                                                                                                                                                                                                                                                                                                              |
+| `backend`               | string   | `search-messages` only: which backend answered the non-IMAP accounts — `"envelope-index"`, `"applescript"`, or `"mixed"` (see `backendByAccount`). Also shown on the summary line while `APPLE_MAIL_MCP_ENVELOPE_INDEX` is on. ([#342](https://github.com/sweetrb/apple-mail-mcp/issues/342)) |
+| `backendByAccount`      | object   | Present only when `backend` is `"mixed"`: account name → `"envelope-index"` or `"applescript"`. |
 
 **Deadline and cancellation ([#276](https://github.com/sweetrb/apple-mail-mcp/issues/276)).** Tool
 calls run one at a time (so they cannot race into Mail.app), which means a long search holds every

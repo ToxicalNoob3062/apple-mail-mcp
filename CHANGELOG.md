@@ -1,5 +1,31 @@
 ## [Unreleased]
 
+## [2.20.41] - 2026-10-29
+
+### Added
+
+- **Opt-in Envelope Index search for AppleScript-only accounts** (#342). With
+  `APPLE_MAIL_MCP_ENVELOPE_INDEX=1`, `search-messages` answers an account's header
+  search (`query`, `from`, `subject`, read/flagged state, dates, mailbox) from Mail's
+  on-disk Envelope Index, opened read-only, instead of an AppleScript scan, so large
+  mailboxes are searched completely instead of skipped. Gmail label mailboxes such as
+  INBOX are resolved through the index's labels table. Date-only `dateFrom`/`dateTo`
+  are read as local days. Needs Full Disk Access for the server's Node runtime; off by
+  default.
+- With the same switch, `get-message` reads a numeric id's `.emlx` file directly,
+  avoiding the `whose id is` lookup that times out on very large mailboxes.
+- `search-messages` reports which backend answered in `structuredContent.backend`
+  (`"envelope-index"`, `"applescript"`, or `"mixed"` with per-account
+  `backendByAccount`), and names it on the summary line while the index is enabled.
+
+### Changed
+
+- Anything the index can't answer completely falls back to the existing AppleScript
+  path: a `flagColor` filter, an unknown or ambiguous mailbox, an unreadable index (no
+  Full Disk Access), an unrecognised schema, or a corrupt, truncated or locked
+  database. A `get-message` miss on disk falls back the same way. With the switch off,
+  behaviour and output are unchanged.
+
 ## [2.20.40] - 2026-10-29
 
 ### Security

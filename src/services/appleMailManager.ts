@@ -50,6 +50,11 @@ import { nativeEditorPreflight, insertNativeAuthoredBody } from "@/services/nati
 import { resolveAttachmentReadPath } from "@/utils/attachmentReadPolicy.js";
 import { searchContactsDb } from "@/utils/contactsDb.js";
 import {
+  isEnvelopeIndexEnabled,
+  readMessageFromStore,
+  searchEnvelopeIndex,
+} from "@/utils/envelopeIndex.js";
+import {
   isAuditEnabled,
   auditSubjectsEnabled,
   auditSnapshotMax,
@@ -85,6 +90,7 @@ import type {
   EmailTemplate,
   SerialEmailRecipient,
   SerialEmailResult,
+  SearchBackend,
   SearchDiagnostics,
   SearchResult,
   SmartMailbox,
@@ -607,6 +613,22 @@ export function mergeSearchDiagnostics(into: SearchDiagnostics, from: SearchDiag
   into.skippedLargeMailboxes.push(...from.skippedLargeMailboxes);
   into.notSearchedMailboxes.push(...from.notSearchedMailboxes);
   if (from.partial) into.partial = true;
+  if (from.backendByAccount) {
+    into.backendByAccount = { ...into.backendByAccount, ...from.backendByAccount };
+  }
+}
+
+/**
+ * Record which backend answered `account` (#342). A no-op unless the opt-in
+ * Envelope Index is enabled, so default-off results are unchanged.
+ */
+function tagBackend(result: SearchResult, account: string, backend: SearchBackend): SearchResult {
+  if (!isEnvelopeIndexEnabled()) return result;
+  result.diagnostics.backendByAccount = {
+    ...result.diagnostics.backendByAccount,
+    [account]: backend,
+  };
+  return result;
 }
 
 /**
@@ -1797,6 +1819,8 @@ export class AppleMailManager {
   private cache = {
     accounts: null as { data: Account[]; expiry: number } | null,
     mailboxNames: new Map<string, { data: string[]; expiry: number }>(),
+    /** Account name → Mail account id (the host part of its mailbox URLs). */
+    accountIds: null as { data: Map<string, string>; expiry: number } | null,
   };
 
   /** Cache TTL in milliseconds (60 seconds). */
@@ -2703,6 +2727,95 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
   private invalidateCache(): void {
     this.cache.accounts = null;
     this.cache.mailboxNames.clear();
+    this.cache.accountIds = null;
+  }
+
+  /**
+   * Mail's internal id for an account (`id of account`), which is the host part
+   * of every mailbox URL in the Envelope Index. Cached with the account list;
+   * null when Mail can't be asked or has no such account.
+   */
+  private getAccountId(account: string): string | null {
+    const now = Date.now();
+    if (!this.cache.accountIds || now >= this.cache.accountIds.expiry) {
+      const result = executeAppleScript(
+        buildAppLevelScript(`
+      set idList to {}
+      repeat with acct in accounts
+        set end of idList to (name of acct) & "${FIELD_SEP}" & (id of acct)
+      end repeat
+      set AppleScript's text item delimiters to "${RECORD_SEP}"
+      return idList as text
+    `)
+      );
+      if (!result.success) return null;
+      const ids = new Map<string, string>();
+      for (const item of result.output.split(RECORD_SEP)) {
+        const [name, id] = item.split(FIELD_SEP);
+        if (name && id) ids.set(name.trim(), id.trim());
+      }
+      this.cache.accountIds = { data: ids, expiry: now + this.CACHE_TTL_MS };
+    }
+    return this.cache.accountIds.data.get(account) ?? null;
+  }
+
+  /**
+   * Opt-in fast path for one account's header search: answer from Mail's Envelope Index instead of an AppleScript
+   * scan. Returns null whenever the index can't answer completely, so the caller
+   * falls back to AppleScript rather than reporting a false empty.
+   */
+  private searchViaEnvelopeIndex(
+    account: string,
+    filters: {
+      query?: string;
+      mailbox?: string;
+      limit: number;
+      dateFrom?: string;
+      dateTo?: string;
+      from?: string;
+      subject?: string;
+      isRead?: boolean;
+      isFlagged?: boolean;
+      flagColorIndex?: number;
+    }
+  ): SearchResult | null {
+    if (!isEnvelopeIndexEnabled()) return null;
+    const fallback = (reason: string): null => {
+      console.error(`[envelopeIndex] ${account}: falling back to AppleScript — ${reason}`);
+      return null;
+    };
+    // Flag colors live in Mail's flag bits, which the index layout doesn't
+    // document; leave those searches to AppleScript.
+    if (filters.flagColorIndex !== undefined) return fallback("flagColor filter");
+    const accountId = this.getAccountId(account);
+    if (!accountId) return fallback("account id unavailable");
+
+    const outcome = searchEnvelopeIndex({ accountId, ...filters });
+    if (!outcome.ok) return fallback(outcome.reason);
+
+    const diagnostics: SearchDiagnostics = {
+      partial: false,
+      timedOutAccounts: [],
+      skippedLargeMailboxes: [],
+      notSearchedMailboxes: [],
+    };
+    const messages: Message[] = outcome.rows.map((r) => ({
+      id: String(r.id),
+      subject: r.subject,
+      sender: r.sender,
+      ...(r.senderName ? { senderName: r.senderName } : {}),
+      recipients: [],
+      dateReceived: r.dateReceived,
+      ...(r.dateSent ? { dateSent: r.dateSent } : {}),
+      isRead: r.isRead,
+      isFlagged: r.isFlagged,
+      isJunk: false,
+      isDeleted: false,
+      mailbox: r.mailbox,
+      account,
+      hasAttachments: r.hasAttachments,
+    }));
+    return { messages, diagnostics };
   }
 
   /**
@@ -3053,6 +3166,24 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
     // an explicit label and has no `tell account` form.
     const local = isLocalStoreLabel(account);
     const targetAccount = local ? LOCAL_STORE_LABEL : this.resolveAccount(account);
+
+    // Opt-in Envelope Index fast path. It returns null whenever it can't answer completely, and the
+    // AppleScript scan below runs as before.
+    if (!local) {
+      const fast = this.searchViaEnvelopeIndex(targetAccount, {
+        query,
+        mailbox,
+        limit,
+        dateFrom,
+        dateTo,
+        from,
+        subject,
+        isRead,
+        isFlagged,
+        flagColorIndex,
+      });
+      if (fast) return tagBackend(fast, targetAccount, "envelope-index");
+    }
     // Inside `tell account` the bare `mailboxes` is the account's; at
     // application level the local branch iterates the ownership-filtered `_mbs`.
     const mbIter = local ? "_mbs" : "mailboxes";
@@ -3226,18 +3357,26 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
       // SIGKILL on an unresponsive account). Surface it as a timeout rather than
       // a false empty result — that confusion is the heart of issue #24.
       console.error(`Failed to search messages in "${targetAccount}": ${result.error}`);
-      return {
-        messages: [],
-        diagnostics: {
-          partial: true,
-          timedOutAccounts: [targetAccount],
-          skippedLargeMailboxes: [],
-          notSearchedMailboxes: [],
+      return tagBackend(
+        {
+          messages: [],
+          diagnostics: {
+            partial: true,
+            timedOutAccounts: [targetAccount],
+            skippedLargeMailboxes: [],
+            notSearchedMailboxes: [],
+          },
         },
-      };
+        targetAccount,
+        "applescript"
+      );
     }
 
-    return this.parseSearchResult(result.output, resultMailbox, targetAccount, rowsIncludeMailbox);
+    return tagBackend(
+      this.parseSearchResult(result.output, resultMailbox, targetAccount, rowsIncludeMailbox),
+      targetAccount,
+      "applescript"
+    );
   }
 
   /**
@@ -3817,6 +3956,26 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
     hint?: { account?: string; mailbox?: string }
   ): MessageContent | null {
     this.lastMessageLookupError = undefined;
+    // Opt-in disk read (Envelope Index → .emlx): no `whose id is` lookup, which
+    // times out on very large mailboxes. Any miss falls through to AppleScript.
+    if (isEnvelopeIndexEnabled() && /^\d+$/.test(id)) {
+      const stored = readMessageFromStore(Number(id), { includeHtml });
+      if ("reason" in stored) {
+        console.error(`[envelopeIndex] get ${id}: falling back to AppleScript — ${stored.reason}`);
+      } else {
+        return {
+          id,
+          subject: stored.subject,
+          plainText: stored.plainText,
+          ...(stored.htmlContent !== undefined ? { htmlContent: stored.htmlContent } : {}),
+          rfcMessageId: stored.rfcMessageId,
+          ...(stored.dateSent
+            ? { dateSent: plausibleDateSent(stored.dateSent, stored.dateReceived) }
+            : {}),
+          ...(stored.dateReceived ? { dateReceived: stored.dateReceived } : {}),
+        };
+      }
+    }
     // Only `source of msg` is fetched when HTML is requested. `content of msg`
     // is the plain-text body and is always cheap.
     const sourceFetch = includeHtml
