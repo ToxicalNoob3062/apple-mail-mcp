@@ -90,11 +90,6 @@ export function errorResponse(message: string, structured?: Record<string, unkno
 
 export type ToolResponse = ReturnType<typeof successResponse> | ReturnType<typeof errorResponse>;
 
-/**
- * Render a partial-coverage warning from search/list diagnostics, so a caller
- * never mistakes an incomplete scan for a confirmed "no matches" (#24/#29).
- * Returns "" when coverage was complete.
- */
 export interface SearchBackendInfo {
   /** The backend that answered, or "mixed" when accounts were answered differently. */
   backend: SearchBackend | "mixed";
@@ -122,6 +117,11 @@ export function searchBackendInfo(diagnostics: SearchDiagnostics): SearchBackend
   return { backend: "mixed", backendByAccount: byAccount, note: ` [backend: ${detail}]` };
 }
 
+/**
+ * Render a partial-coverage warning from search/list diagnostics, so a caller
+ * never mistakes an incomplete scan for a confirmed "no matches" (#24/#29).
+ * Returns "" when coverage was complete.
+ */
 export function partialCoverageBlock(diagnostics: SearchDiagnostics): string {
   const notes: string[] = [];
   if (diagnostics.timedOutAccounts.length > 0) {
