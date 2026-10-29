@@ -84,4 +84,8 @@ describe("htmlToText", () => {
       )
     ).toBe("Hello & welcome\n Line 2\n3");
   });
+
+  it("decodes each entity once (no double-unescape of &amp;lt;)", () => {
+    expect(htmlToText("<p>&amp;lt;b&amp;gt; &amp;amp;</p>")).toBe("&lt;b&gt; &amp;");
+  });
 });
