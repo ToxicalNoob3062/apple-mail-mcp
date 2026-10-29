@@ -1,6 +1,6 @@
 ## [Unreleased]
 
-## [2.20.40] - 2026-10-29
+## [2.20.41] - 2026-10-29
 
 ### Added
 
@@ -25,6 +25,18 @@
   Full Disk Access), an unrecognised schema, or a corrupt, truncated or locked
   database. A `get-message` miss on disk falls back the same way. With the switch off,
   behaviour and output are unchanged.
+
+## [2.20.40] - 2026-10-29
+
+### Security
+
+- **`body-parser` floor added at 2.4.0** for GHSA-27r3-jxmh-p828 (high). Reached through
+  `@modelcontextprotocol/sdk` → express, the HTTP transport this stdio server never enters, so
+  exposure is near-zero. 2.4.0 was published 2026-10-22 and floored once the 7-day
+  `minimumReleaseAge` soak cleared; no `minimumReleaseAgeExclude` was used.
+- **`@hono/node-server` exact pin `2.0.10` replaced by the two-sided floor `>=2.1.3 <3`** for
+  GHSA-rmxm-3fg6-px4f (moderate: `serveStatic` double-decode, fixed in 2.1.3). An exact pin is a
+  ceiling and had held the tree on the vulnerable version. Same reachability as above.
 
 ## [2.20.39] - 2026-10-28
 
