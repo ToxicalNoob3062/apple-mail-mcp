@@ -1,5 +1,51 @@
 ## [Unreleased]
 
+## [2.20.46] - 2026-10-30
+
+### Added
+
+- **Opt-in local body index: body search for AppleScript-only accounts.** With
+  `APPLE_MAIL_MCP_BODY_INDEX=1` on top of `APPLE_MAIL_MCP_ENVELOPE_INDEX=1`,
+  `search-messages` answers `body` queries for accounts with no IMAP config from
+  a local SQLite FTS5 index of the `.emlx` files Mail already keeps on disk,
+  instead of reporting those accounts as not searched. The body match runs in
+  the same query as the header filters, against the index attached read-only.
+  ([#349](https://github.com/sweetrb/apple-mail-mcp/issues/349))
+  - **Never a false empty (#346).** Every message in the searched scope that
+    the index could not read in full — not downloaded, not indexed yet, only
+    headers downloaded, or over the 25 MB cap — is counted, and the result is
+    `partial: true` with `notSearchedMailboxes`, e.g.
+    `Google / * (1,234 messages not downloaded)`, even when there are hits. An
+    unreadable index, a file that isn't ours, or a schema mismatch reports the
+    account as not searched, with the reason.
+  - **Privacy.** Contentless FTS5 (`content=''`): only the token index is
+    stored, never a second copy of any body. The directory is created `0700`;
+    the database, its `-wal`/`-shm` and the writer lock are `0600`. Default
+    location `~/Library/Application Support/apple-mail-mcp/body-index.db`
+    (`APPLE_MAIL_MCP_BODY_INDEX_FILE` to move it).
+  - **Our file only.** The index is stamped with `PRAGMA application_id` and
+    `user_version`. A file at the index path without our application id is
+    never modified or deleted. One of ours that is damaged or has an older
+    layout is rebuilt by the writer, and the rebuild is noted in `doctor`.
+  - **One writer per index file.** Several server instances share the file;
+    the first takes an OS-released lock and is the only one that walks,
+    watches and writes. The others attach it read-only and take over when it
+    exits or crashes. A reader never rebuilds.
+  - **Kept current by FSEvents plus a full walk.** A recursive `fs.watch`
+    makes new mail searchable within seconds; a full walk every 10 minutes
+    (5 without a watcher, and at once after a coalesced event, a renamed
+    mailbox or a watcher error) is the guarantee. The walk compares
+    `(path, size, mtime)` and only parses changed files.
+  - **Bounded work.** Walking and indexing run in 50 ms slices with 100 ms
+    pauses, on `unref()`'d timers, and stop on shutdown. A search never waits
+    for the build: it indexes queued file events for at most 50 ms, then
+    answers with the coverage it has.
+  - **`doctor`** reports the body index: path, writer or reader, watcher,
+    coverage, last full walk, last rebuild and last error.
+  - Off by default and inert when off: no file, watcher or timer. Turns itself
+    off with a diagnostic on Node < 22.5 (no `node:sqlite`) or a SQLite without
+    FTS5 `contentless_delete`.
+
 ## [2.20.45] - 2026-10-30
 
 ### Changed
