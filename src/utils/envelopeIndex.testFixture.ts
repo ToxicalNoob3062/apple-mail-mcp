@@ -1,7 +1,7 @@
 /**
  * Test fixtures: a fake `~/Library/Mail` tree with an Envelope Index shaped like
  * Mail.app's (only the tables/columns the readers use) and `.emlx` files.
- * Shared by the envelopeIndex, emlx and manager tests.
+ * Shared by the envelopeIndex, bodyIndex and manager tests.
  */
 import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";

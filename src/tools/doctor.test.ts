@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { runDoctor, formatDoctorReport } from "@/tools/doctor.js";
+import { runDoctor, formatDoctorReport, bodyIndexCheck } from "@/tools/doctor.js";
 import type { AppleMailManager } from "@/services/appleMailManager.js";
 
 function fakeManager(over: Partial<AppleMailManager> = {}): AppleMailManager {
@@ -92,5 +92,54 @@ describe("runDoctor (C3)", () => {
     vi.stubEnv("APPLE_MAIL_MCP_SMTP_HOST", "");
     const r = await runDoctor(fakeManager());
     expect(formatDoctorReport(r)).not.toMatch(/undefined/);
+  });
+});
+
+describe("body index check", () => {
+  it("says nothing when the body index was never asked for", () => {
+    expect(bodyIndexCheck({ enabled: false }, {})).toBeNull();
+  });
+
+  it("warns when only the body flag is set", () => {
+    const c = bodyIndexCheck({ enabled: false }, { APPLE_MAIL_MCP_BODY_INDEX: "1" });
+    expect(c?.status).toBe("warn");
+    expect(c?.detail).toMatch(/APPLE_MAIL_MCP_ENVELOPE_INDEX is not/);
+  });
+
+  it("reports path, role, coverage, last walk, rebuild and last error", () => {
+    const c = bodyIndexCheck({
+      enabled: true,
+      path: "/x/body-index.db",
+      role: "writer",
+      watching: true,
+      counts: { indexed: 68000, queued: 12, partial: 3, tooLarge: 1 },
+      meta: {
+        lastFullWalk: "2026-10-30T15:00:00.000Z",
+        lastWalkMs: 900,
+        lastWalkFiles: 68016,
+        lastRebuild: "2026-10-29T10:00:00.000Z (schema v2 → v3)",
+      },
+      lastError: "2026-10-30T15:01:00.000Z file watcher stopped: x",
+    });
+    expect(c?.status).toBe("ok");
+    expect(c?.detail).toContain("file /x/body-index.db");
+    expect(c?.detail).toContain("this instance is the writer (watching the mail store)");
+    expect(c?.detail).toContain(
+      "68,003 messages indexed, 12 not indexed yet, 3 with no body downloaded yet, 1 over the 25 MB cap"
+    );
+    expect(c?.detail).toContain("last full walk 2026-10-30T15:00:00.000Z (68,016 files, 900 ms)");
+    expect(c?.detail).toContain("rebuilt 2026-10-29T10:00:00.000Z (schema v2 → v3)");
+    expect(c?.detail).toContain("last error: 2026-10-30T15:01:00.000Z file watcher stopped");
+  });
+
+  it("warns, with the shared Full Disk Access wording, when it can't run", () => {
+    const c = bodyIndexCheck({
+      enabled: true,
+      unavailable:
+        "Envelope Index not readable (grant Full Disk Access to the server's Node runtime)",
+    });
+    expect(c?.status).toBe("warn");
+    expect(c?.detail).toMatch(/Full Disk Access/);
+    expect(c?.detail).toMatch(/as not searched/);
   });
 });

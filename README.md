@@ -357,6 +357,47 @@ mailbox, no Full Disk Access, an unrecognised schema, or a corrupt or locked dat
 falls back to the AppleScript scan. The `backend` field below reports which one answered.
 ([#342](https://github.com/sweetrb/apple-mail-mcp/issues/342))
 
+**Body search for AppleScript-only accounts (opt-in local body index).** Without IMAP,
+`search-messages` can't search message bodies (AppleScript would have to pull every
+body through Mail), so a `body` query reports those accounts as not searched. Set
+`APPLE_MAIL_MCP_BODY_INDEX=1` **together with** `APPLE_MAIL_MCP_ENVELOPE_INDEX=1` to
+search them through a local full-text index of the `.emlx` files Mail already keeps
+on disk. ([#349](https://github.com/sweetrb/apple-mail-mcp/issues/349))
+
+- **What it reads, and what it needs.** Message files under `~/Library/Mail`, read
+  only; the mail store is never written. Like the Envelope Index backend, it needs
+  **Full Disk Access** for the app that runs the server (its Node runtime). `doctor`
+  reports when it can't read the store, with the same wording.
+- **Where the index lives.** `~/Library/Application Support/apple-mail-mcp/body-index.db`
+  (plus `-wal`, `-shm` and `.writer-lock` next to it); set
+  `APPLE_MAIL_MCP_BODY_INDEX_FILE` to move it. The directory is created `0700` and the
+  files `0600`. The index is _contentless_: it stores the search tokens, not a copy of
+  any message, but the tokens still reveal a lot about your mail — treat the file as
+  sensitive. Expect roughly 70 MB per 22,000 messages.
+- **Deleting it.** Turn the flag off (or stop the server), then delete the files:
+
+  ```bash
+  rm -f ~/Library/Application\ Support/apple-mail-mcp/body-index.db*
+  ```
+
+  It is only a cache; with the flag on it is rebuilt from scratch on the next start.
+
+- **First build and upkeep.** One server instance (the first to start) builds and
+  updates the index in the background in small slices; other instances — one per
+  conversation in some hosts — search it read-only and take over if that instance
+  exits. New mail is picked up through file-system events within seconds, with a full
+  check every 10 minutes as a safety net. A build of ~22,000 messages took about 30 s
+  on an Apple-silicon Mac.
+- **Coverage is always reported.** A body search never presents an incomplete index as
+  "no matches". Messages in the searched scope that it couldn't read in full are
+  counted, and the result is `partial: true` with a `notSearchedMailboxes` entry such as
+  `Google / * (1,234 messages not downloaded, 12 not indexed yet)`. _Not downloaded_
+  means Mail has only the headers (common for older mail on IMAP/Exchange accounts set
+  to download recent messages only); open those messages in Mail, or change the
+  account's download setting, to make them searchable. Messages over 25 MB are not read.
+- **Requirements.** Node 22.5 or later (for `node:sqlite`); on older runtimes the
+  feature turns itself off and says why in the logs and `doctor`.
+
 **Coverage diagnostics (structured fields).** The warning above is prose for a
 human reader; the same information is also returned as structured fields on
 `search-messages` and `list-messages`, so a caller can tell _"nothing matched"_
@@ -373,8 +414,8 @@ apart from _"I did not look everywhere"_ without parsing the text:
 | `omittedMessages`       | object[] | IMAP messages that belong on the page but whose `FETCH` response could not be read even with a reduced item set — `{ id, mailbox, uid, reason }`. The page is short by exactly these; the `id` still works with `get-message` / `get-message-headers`. ([#256](https://github.com/sweetrb/apple-mail-mcp/issues/256))                                                                               |
 | `timedOutMailboxes`     | string[] | IMAP mailboxes the search did not finish because the call was **cancelled** (`notifications/cancelled`) or reached its **deadline** (`APPLE_MAIL_MCP_SEARCH_DEADLINE_MS`, default 45s), formatted `"Account / Mailbox"`; an account never reached is `"Account / *"`. Results from the mailboxes that did finish are still returned. ([#276](https://github.com/sweetrb/apple-mail-mcp/issues/276)) |
 | `stoppedBy`             | string   | `"deadline"` or `"cancelled"` — present only with `timedOutMailboxes`.                                                                                                                                                                                                                                                                                                                              |
-| `backend`               | string   | `search-messages` only: which backend answered the non-IMAP accounts — `"envelope-index"`, `"applescript"`, or `"mixed"` (see `backendByAccount`). Also shown on the summary line while `APPLE_MAIL_MCP_ENVELOPE_INDEX` is on. ([#342](https://github.com/sweetrb/apple-mail-mcp/issues/342)) |
-| `backendByAccount`      | object   | Present only when `backend` is `"mixed"`: account name → `"envelope-index"` or `"applescript"`. |
+| `backend`               | string   | `search-messages` only: which backend answered the non-IMAP accounts — `"envelope-index"`, `"applescript"`, or `"mixed"` (see `backendByAccount`). Also shown on the summary line while `APPLE_MAIL_MCP_ENVELOPE_INDEX` is on. ([#342](https://github.com/sweetrb/apple-mail-mcp/issues/342))                                                                                                       |
+| `backendByAccount`      | object   | Present only when `backend` is `"mixed"`: account name → `"envelope-index"` or `"applescript"`.                                                                                                                                                                                                                                                                                                     |
 
 **Deadline and cancellation ([#276](https://github.com/sweetrb/apple-mail-mcp/issues/276)).** Tool
 calls run one at a time (so they cannot race into Mail.app), which means a long search holds every
@@ -978,12 +1019,12 @@ Reply to an existing message.
 | ------------- | --------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `id`          | string                                  | Yes      | Message ID to reply to                                                                                                                                                             |
 | `account`     | string                                  | No       | Source account for a numeric ID; provide together with `mailbox`                                                                                                                   |
-| `mailbox`     | string                                  | No       | Source mailbox path for a numeric ID; provide together with `account`                                                                                                               |
+| `mailbox`     | string                                  | No       | Source mailbox path for a numeric ID; provide together with `account`                                                                                                              |
 | `body`        | string                                  | Yes      | Reply body (plain text; HTML tags such as `<br>` are not rendered)                                                                                                                 |
 | `replyAll`    | boolean                                 | No       | Reply to all recipients (default: false)                                                                                                                                           |
 | `send`        | boolean                                 | No       | Send immediately (default: true, false = save as draft)                                                                                                                            |
 | `transport`   | string                                  | No       | `smtp` or `applescript`; omitted prefers configured SMTP when sending. Drafts use AppleScript.                                                                                     |
-| `composition` | string                                  | No       | `native-editor` uses Mail's visible editor and preserves its native reply history                                                                                                   |
+| `composition` | string                                  | No       | `native-editor` uses Mail's visible editor and preserves its native reply history                                                                                                  |
 | `attachments` | (string \| {filename, contentBase64})[] | No       | Up to 20 attachments, same rules as `send-email`: absolute file paths inside the configured read roots and/or inline `{filename, contentBase64}` objects up to 25 MiB decoded each |
 
 **Example - Reply to sender only:**
@@ -1073,7 +1114,7 @@ Forward a message to new recipients.
 | Parameter     | Type                                    | Required | Description                                                                                                                                                                                   |
 | ------------- | --------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `id`          | string                                  | Yes      | Message ID to forward                                                                                                                                                                         |
-| `account`     | string                                  | No       | Source account for a numeric ID; provide together with `mailbox`                                                                                                                             |
+| `account`     | string                                  | No       | Source account for a numeric ID; provide together with `mailbox`                                                                                                                              |
 | `mailbox`     | string                                  | No       | Source mailbox path for a numeric ID; provide together with `account`                                                                                                                         |
 | `to`          | string[]                                | Yes      | Recipients to forward to                                                                                                                                                                      |
 | `body`        | string                                  | No       | Message to prepend (plain text)                                                                                                                                                               |

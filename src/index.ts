@@ -135,6 +135,11 @@ import {
 } from "@/schemas.js";
 import { normalizeSubject, subjectFromGetMessage } from "@/tools/thread.js";
 import { extractRfcMessageIdFromSource } from "@/utils/mimeParse.js";
+import {
+  isBodyIndexEnabled,
+  startBackgroundIndexing,
+  stopBodyIndexing,
+} from "@/utils/bodyIndexSync.js";
 import { headersStructured, isoOrUndefined, parseHeaderBlock } from "@/utils/headers.js";
 import { ImapIdleWatcher } from "@/services/imapIdle.js";
 import { loadFileConfig } from "@/services/fileConfig.js";
@@ -588,7 +593,7 @@ registerTool(
         .string()
         .optional()
         .describe(
-          "Text to search for in the message body (server-side IMAP BODY search). Requires the IMAP backend for the account searched; AppleScript-only accounts cannot search bodies and are reported as not searched."
+          "Text to search for in the message body (server-side IMAP BODY search). Requires the IMAP backend for the account searched, or the opt-in local body index (APPLE_MAIL_MCP_BODY_INDEX); otherwise AppleScript-only accounts cannot search bodies and are reported as not searched."
         ),
       from: z
         .string()
@@ -720,7 +725,9 @@ registerTool(
         // real mailboxes. Rather than silently drop the body filter (and return
         // subject/sender matches as if they were body matches), AppleScript-only
         // accounts are skipped and reported as not searched.
-        if (body) {
+        // With the opt-in body index (APPLE_MAIL_MCP_BODY_INDEX) those accounts
+        // are searched locally instead; it reports partial coverage itself.
+        if (body && !isBodyIndexEnabled()) {
           const apple: AppleScan = {
             rows: [],
             diagnostics: {
@@ -765,7 +772,8 @@ registerTool(
               subject,
               isRead,
               isFlagged,
-              flagColorIndex
+              flagColorIndex,
+              body
             )
           ),
           listFailure
@@ -782,9 +790,9 @@ registerTool(
           );
         }
 
-        if (body) {
+        if (body && !isBodyIndexEnabled()) {
           return errorResponse(
-            `Body search requires the IMAP backend, which is not configured for ${
+            `Body search requires the IMAP backend (or the opt-in body index), which is not configured for ${
               account ? `account "${account}"` : "any account"
             }. Configure IMAP (see the IMAP backend section of the README) or search by query/subject/from instead.`
           );
@@ -801,7 +809,8 @@ registerTool(
           subject,
           isRead,
           isFlagged,
-          flagColorIndex
+          flagColorIndex,
+          body
         );
 
         const coverageBlock = partialCoverageBlock(diagnostics);
@@ -4016,6 +4025,10 @@ process.on("unhandledRejection", (reason) => {
 const transport = withJsonSchema2020_12(new StdioServerTransport());
 await server.connect(transport);
 
+// Opt-in local body index (APPLE_MAIL_MCP_BODY_INDEX): fill it in the
+// background so body searches on AppleScript-only accounts reach full coverage.
+if (isBodyIndexEnabled()) startBackgroundIndexing();
+
 // IMAP IDLE push notifications (B5) — opt-in. When enabled, watch every
 // configured IMAP account's INBOX and notify the client on new mail via a
 // logging message + a resource-updated signal for the account's mailbox.
@@ -4062,6 +4075,8 @@ const shutdown = (): void => {
   clearInterval(orphanWatchdog);
   const force = setTimeout(() => process.exit(0), 2000);
   force.unref?.();
+  // Release the body index's FSEvents watcher and close its database file.
+  stopBodyIndexing();
   // Closing the IDLE watcher logs out its dedicated per-account connections
   // (one persistent socket per account when APPLE_MAIL_MCP_IMAP_IDLE=1) and
   // dropAllPools() closes the request pool — together this releases EVERY IMAP

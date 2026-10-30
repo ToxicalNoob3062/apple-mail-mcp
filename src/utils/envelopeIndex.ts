@@ -42,12 +42,20 @@ import {
   extractTextBody,
 } from "@/utils/mimeParse.js";
 import { emlxCandidates, emlxSource, htmlToText } from "@/utils/emlx.js";
+import {
+  ATTACH_ALIAS,
+  bodyMatchClause,
+  scopeCoverage,
+  stampMismatch,
+  type BodyScopeCoverage,
+} from "@/utils/bodyIndex.js";
 
 /** Minimal shape of the `node:sqlite` DatabaseSync we rely on. */
 export interface SqliteStatement {
   all(...params: unknown[]): Record<string, unknown>[];
   get(...params: unknown[]): Record<string, unknown> | undefined;
   run(...params: unknown[]): unknown;
+  setReadBigInts(enabled: boolean): void;
 }
 export interface SqliteDatabase {
   prepare(sql: string): SqliteStatement;
@@ -62,6 +70,13 @@ export interface SqliteModule {
 export const ENVELOPE_INDEX_ENV = "APPLE_MAIL_MCP_ENVELOPE_INDEX";
 /** Override for the Mail data root (tests point it at a fixture tree). */
 export const MAIL_DIR_ENV = "APPLE_MAIL_MCP_MAIL_DIR";
+
+/**
+ * Why the Mail store can't be read, worded once for every reader of it (the
+ * Envelope Index header search, store reads, the body index, `doctor`).
+ */
+export const FULL_DISK_ACCESS_REASON =
+  "Envelope Index not readable (grant Full Disk Access to the server's Node runtime)";
 
 /** True when `value` is one of the usual truthy spellings. */
 export function isTruthyFlag(value: string | undefined): boolean {
@@ -220,6 +235,12 @@ export interface EnvelopeSearchParams {
   isFlagged?: boolean;
   /** Restrict to these ROWIDs (body-search hits), in addition to the filters. */
   rowIds?: number[];
+  /**
+   * Body text to match through the local body index (see bodyIndex.ts). The
+   * index file is attached read-only for the query, and the outcome carries
+   * how many messages in scope it could not search.
+   */
+  body?: { text: string; indexFile: string };
   limit: number;
 }
 
@@ -240,7 +261,8 @@ export interface EnvelopeRow {
 }
 
 export type EnvelopeSearchOutcome =
-  { ok: true; rows: EnvelopeRow[] } | { ok: false; reason: string };
+  | { ok: true; rows: EnvelopeRow[]; bodyCoverage?: BodyScopeCoverage }
+  | { ok: false; reason: string };
 
 /** Escape `%`, `_` and `\` for a `LIKE ... ESCAPE '\'` pattern. */
 export function likePattern(text: string): string {
@@ -377,6 +399,22 @@ export function searchOpenIndex(
     args.push(JSON.stringify(params.rowIds));
   }
 
+  const fromSql = `
+    FROM messages m
+    LEFT JOIN subjects s ON m.subject = s.ROWID
+    LEFT JOIN addresses a ON m.sender = a.ROWID
+    LEFT JOIN mailboxes mb ON m.mailbox = mb.ROWID`;
+  // Coverage is counted over the header filters alone: every message the body
+  // match had to look at, whether or not it matched.
+  const bodyCoverage = params.body ? scopeCoverage(db, fromSql, where, args) : undefined;
+  const filterWhere = [...where];
+  const filterArgs = [...args];
+  if (params.body) {
+    const clause = bodyMatchClause(params.body.text);
+    filterWhere.push(clause.sql);
+    filterArgs.push(...clause.args);
+  }
+
   const sql = `
     SELECT m.ROWID AS id,
            ${subjectExpr} AS subject,
@@ -388,18 +426,16 @@ export function searchOpenIndex(
            m.flagged AS is_flagged,
            mb.url AS url,
            ${features.attachments ? "EXISTS (SELECT 1 FROM attachments t WHERE t.message = m.ROWID)" : "0"} AS has_attachments
-    FROM messages m
-    LEFT JOIN subjects s ON m.subject = s.ROWID
-    LEFT JOIN addresses a ON m.sender = a.ROWID
-    LEFT JOIN mailboxes mb ON m.mailbox = mb.ROWID
-    WHERE ${where.join(" AND ")}
+    ${fromSql}
+    WHERE ${filterWhere.join(" AND ")}
     ORDER BY m.date_received DESC
     LIMIT ?`;
-  args.push(params.limit);
+  filterArgs.push(params.limit);
 
-  const rows = db.prepare(sql).all(...args);
+  const rows = db.prepare(sql).all(...filterArgs);
   return {
     ok: true,
+    ...(bodyCoverage ? { bodyCoverage } : {}),
     rows: rows.map((r) => {
       const address = typeof r.address === "string" ? r.address : "";
       const name = typeof r.comment === "string" ? r.comment.trim() : "";
@@ -437,7 +473,7 @@ export function searchEnvelopeIndex(
   if (!indexPath) {
     return {
       ok: false,
-      reason: "Envelope Index not readable (grant Full Disk Access to the server's Node runtime)",
+      reason: FULL_DISK_ACCESS_REASON,
     };
   }
 
@@ -447,6 +483,20 @@ export function searchEnvelopeIndex(
     const features = checkSchema(db);
     if ("mismatch" in features) {
       return { ok: false, reason: `unexpected Envelope Index schema: ${features.mismatch}` };
+    }
+    if (params.body) {
+      // Attached through a read-only connection, so it is read-only too: a
+      // search can never write the body index, only the writer instance does.
+      try {
+        db.prepare(`ATTACH DATABASE ? AS ${ATTACH_ALIAS}`).run(params.body.indexFile);
+        const mismatch = stampMismatch(db, ATTACH_ALIAS);
+        if (mismatch) return { ok: false, reason: mismatch };
+      } catch (err) {
+        return {
+          ok: false,
+          reason: `body index unreadable: ${err instanceof Error ? err.message : String(err)}`,
+        };
+      }
     }
     return searchOpenIndex(db, features, params);
   } catch (err) {
@@ -495,7 +545,7 @@ export function readMessageFromStore(
   const store = opts.store === undefined ? resolveMailStore() : opts.store;
   if (!store) {
     return {
-      reason: "Envelope Index not readable (grant Full Disk Access to the server's Node runtime)",
+      reason: FULL_DISK_ACCESS_REASON,
     };
   }
 

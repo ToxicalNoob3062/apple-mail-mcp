@@ -1,5 +1,5 @@
 /**
- * Opt-in Envelope Index routing in searchMessagesWithDiagnostics and getMessageContent.
+ * Opt-in Envelope Index / body index routing in searchMessagesWithDiagnostics and getMessageContent.
  *
  * executeAppleScript is mocked: it answers the account and account-id reads,
  * and records every other script so a test can tell whether the AppleScript
@@ -15,6 +15,8 @@ import {
   sqlite,
   writeEmlx,
 } from "@/utils/envelopeIndex.testFixture.js";
+import { resetBodyIndexForTests } from "@/utils/bodyIndexSync.js";
+import { BodyIndexWriter } from "@/utils/bodyIndex.js";
 
 const FS = "\x1f";
 const RS = "\x1e";
@@ -102,10 +104,13 @@ describeIfSqlite("searchMessagesWithDiagnostics — Envelope Index backend", () 
   beforeEach(() => {
     h.calls.length = 0;
     h.idLookupFails = false;
+    resetBodyIndexForTests();
     process.env.APPLE_MAIL_MCP_MAIL_DIR = root;
+    process.env.APPLE_MAIL_MCP_BODY_INDEX_FILE = join(root, "support", "body.db");
     mgr = new AppleMailManager();
   });
   afterEach(() => {
+    resetBodyIndexForTests();
     process.env = { ...saved };
   });
 
@@ -244,6 +249,162 @@ describeIfSqlite("searchMessagesWithDiagnostics — Envelope Index backend", () 
   it("leaves results untagged when the index is disabled", () => {
     const r = mgr.searchMessagesWithDiagnostics("flight", undefined, "Google");
     expect(r.diagnostics.backendByAccount).toBeUndefined();
+  });
+
+  it("reports a body search it can't serve as not searched — never as no matches", () => {
+    process.env.APPLE_MAIL_MCP_ENVELOPE_INDEX = "1";
+    const r = mgr.searchMessagesWithDiagnostics(
+      undefined,
+      undefined,
+      "Google",
+      50,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "booking"
+    );
+    expect(appleScanRan()).toBe(false);
+    expect(r.messages).toEqual([]);
+    expect(r.diagnostics.partial).toBe(true);
+    expect(r.diagnostics.notSearchedMailboxes[0]).toBe(
+      "Google / * (body search unavailable: body index disabled)"
+    );
+  });
+
+  /** Build the body index the way the writer's background loop would. */
+  function buildBodyIndex(): void {
+    const w = BodyIndexWriter.open(
+      join(root, "V10"),
+      process.env.APPLE_MAIL_MCP_BODY_INDEX_FILE!,
+      sqlite!
+    );
+    if ("reason" in w) throw new Error(w.reason);
+    w.startWalk();
+    while (!w.walkStep(60_000));
+    while (w.indexStep(60_000) > 0);
+    w.close();
+  }
+
+  it("searches bodies through the body index, per account", () => {
+    process.env.APPLE_MAIL_MCP_ENVELOPE_INDEX = "1";
+    process.env.APPLE_MAIL_MCP_BODY_INDEX = "1";
+    buildBodyIndex();
+    const search = (account: string) =>
+      mgr.searchMessagesWithDiagnostics(
+        undefined,
+        undefined,
+        account,
+        50,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        "booking"
+      );
+    const google = search("Google");
+    expect(google.messages.map((m) => m.id)).toEqual(["11"]);
+    expect(google.diagnostics.partial).toBe(false);
+    expect(search("Work").messages.map((m) => m.id)).toEqual(["21"]);
+    expect(appleScanRan()).toBe(false);
+  });
+
+  it("combines a body match with header filters", () => {
+    process.env.APPLE_MAIL_MCP_ENVELOPE_INDEX = "1";
+    process.env.APPLE_MAIL_MCP_BODY_INDEX = "1";
+    buildBodyIndex();
+    const r = mgr.searchMessagesWithDiagnostics(
+      undefined,
+      undefined,
+      "Google",
+      50,
+      undefined,
+      undefined,
+      "news@",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "booking"
+    );
+    expect(r.messages).toEqual([]);
+    expect(r.diagnostics.partial).toBe(false);
+  });
+
+  it("reports an incomplete index as partial with counts, even with zero hits (#346)", () => {
+    process.env.APPLE_MAIL_MCP_ENVELOPE_INDEX = "1";
+    process.env.APPLE_MAIL_MCP_BODY_INDEX = "1";
+    buildBodyIndex();
+    const db = new sqlite!.DatabaseSync(process.env.APPLE_MAIL_MCP_BODY_INDEX_FILE!);
+    db.exec("UPDATE docs SET state = 0 WHERE id = 12; DELETE FROM docs WHERE id = 11");
+    db.close();
+    // Search as a reader (another instance is the writer), so nothing catches up first.
+    const other = new sqlite!.DatabaseSync(
+      `${process.env.APPLE_MAIL_MCP_BODY_INDEX_FILE}.writer-lock`
+    );
+    other.exec("BEGIN EXCLUSIVE");
+    const r = mgr.searchMessagesWithDiagnostics(
+      undefined,
+      undefined,
+      "Google",
+      50,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "no such words anywhere"
+    );
+    other.exec("ROLLBACK");
+    other.close();
+    expect(r.messages).toEqual([]);
+    expect(r.diagnostics.partial).toBe(true);
+    expect(r.diagnostics.notSearchedMailboxes).toEqual([
+      "Google / * (1 messages not downloaded, 1 not indexed yet)",
+    ]);
+    expect(appleScanRan()).toBe(false);
+  });
+
+  it("reports a missing index file as not searched, not as no matches", () => {
+    process.env.APPLE_MAIL_MCP_ENVELOPE_INDEX = "1";
+    process.env.APPLE_MAIL_MCP_BODY_INDEX = "1";
+    process.env.APPLE_MAIL_MCP_BODY_INDEX_FILE = join(root, "support", "absent", "x.db");
+    // Another instance holds the writer role, so this one can't create the file.
+    const lockDir = join(root, "support", "absent");
+    mkdirSync(lockDir, { recursive: true });
+    const other = new sqlite!.DatabaseSync(join(lockDir, "x.db.writer-lock"));
+    other.exec("BEGIN EXCLUSIVE");
+    try {
+      const r = mgr.searchMessagesWithDiagnostics(
+        undefined,
+        undefined,
+        "Google",
+        50,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        "booking"
+      );
+      expect(r.diagnostics.partial).toBe(true);
+      expect(r.diagnostics.notSearchedMailboxes).toEqual([
+        "Google / * (body search unavailable: body index not created yet)",
+      ]);
+    } finally {
+      other.exec("ROLLBACK");
+      other.close();
+    }
   });
 
   it("reads a message from disk when enabled, without an AppleScript lookup", () => {
