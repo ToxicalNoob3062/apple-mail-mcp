@@ -1,5 +1,19 @@
 ## [Unreleased]
 
+## [2.20.44] - 2026-10-30
+
+### Fixed
+
+- **Inbox lookups no longer classify Proton or other providers as Gmail merely
+  because they expose an All Mail folder.** Search, list, and recent-message
+  statistics now require a Gmail receiving-server host before applying the
+  existing All Mail workaround. Other providers retain their literal Inbox;
+  an unavailable host does not broaden the requested mailbox scope.
+- **Scoped message reads distinguish a missing account from a missing mailbox.**
+  A nonexistent explicit account now names the account in the error and directs
+  callers to `list-accounts`, without a fallback scan. Stale remembered accounts
+  retain their existing bounded lookup behavior.
+
 ## [2.20.43] - 2026-10-29
 
 ### Fixed
