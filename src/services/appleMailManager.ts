@@ -54,6 +54,8 @@ import {
   readMessageFromStore,
   searchEnvelopeIndex,
 } from "@/utils/envelopeIndex.js";
+import { prepareBodySearch } from "@/utils/bodyIndexSync.js";
+import { describeScopeGap, isScopeComplete } from "@/utils/bodyIndex.js";
 import {
   isAuditEnabled,
   auditSubjectsEnabled,
@@ -2830,7 +2832,8 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
   }
 
   /**
-   * Opt-in fast path for one account's header search: answer from Mail's Envelope Index instead of an AppleScript
+   * Opt-in fast path for one account's header search (and, with the body index,
+   * body search): answer from Mail's Envelope Index instead of an AppleScript
    * scan. Returns null whenever the index can't answer completely, so the caller
    * falls back to AppleScript rather than reporting a false empty.
    */
@@ -2847,6 +2850,7 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
       isRead?: boolean;
       isFlagged?: boolean;
       flagColorIndex?: number;
+      body?: string;
     }
   ): SearchResult | null {
     if (!isEnvelopeIndexEnabled()) return null;
@@ -2860,8 +2864,28 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
     const accountId = this.getAccountId(account);
     if (!accountId) return fallback("account id unavailable");
 
-    const outcome = searchEnvelopeIndex({ accountId, ...filters });
-    if (!outcome.ok) return fallback(outcome.reason);
+    // AppleScript can't search bodies, so from here on a body search that the
+    // index can't serve is reported as not searched (with the reason), never
+    // handed to the AppleScript scan and never reported as "no matches".
+    const scope = `${account} / ${filters.mailbox || "*"}`;
+    const notSearched = (reason: string): SearchResult => ({
+      messages: [],
+      diagnostics: {
+        partial: true,
+        timedOutAccounts: [],
+        skippedLargeMailboxes: [],
+        notSearchedMailboxes: [`${scope} (body search unavailable: ${reason})`],
+      },
+    });
+    let body: { text: string; indexFile: string } | undefined;
+    if (filters.body !== undefined) {
+      const ready = prepareBodySearch();
+      if (!ready.ok) return notSearched(ready.reason);
+      body = { text: filters.body, indexFile: ready.file };
+    }
+
+    const outcome = searchEnvelopeIndex({ accountId, ...filters, body });
+    if (!outcome.ok) return body ? notSearched(outcome.reason) : fallback(outcome.reason);
 
     const diagnostics: SearchDiagnostics = {
       partial: false,
@@ -2869,6 +2893,13 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
       skippedLargeMailboxes: [],
       notSearchedMailboxes: [],
     };
+    // #346: a result built from an incomplete index is never a confirmed
+    // empty. Every message in scope the body match couldn't read in full is
+    // counted and named, even when there are hits.
+    if (outcome.bodyCoverage && !isScopeComplete(outcome.bodyCoverage)) {
+      diagnostics.partial = true;
+      diagnostics.notSearchedMailboxes.push(`${scope} (${describeScopeGap(outcome.bodyCoverage)})`);
+    }
     const messages: Message[] = outcome.rows.map((r) => ({
       id: String(r.id),
       subject: r.subject,
@@ -3187,7 +3218,8 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
     subject?: string,
     isRead?: boolean,
     isFlagged?: boolean,
-    flagColorIndex?: number
+    flagColorIndex?: number,
+    body?: string
   ): SearchResult {
     // If no account specified, search across all accounts and merge diagnostics.
     if (!account) {
@@ -3222,7 +3254,8 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
             subject,
             isRead,
             isFlagged,
-            flagColorIndex
+            flagColorIndex,
+            body
           );
           allMessages.push(...res.messages);
           mergeSearchDiagnostics(diagnostics, res.diagnostics);
@@ -3240,7 +3273,8 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
     const local = isLocalStoreLabel(account);
     const targetAccount = local ? LOCAL_STORE_LABEL : this.resolveAccount(account);
 
-    // Opt-in Envelope Index fast path. It returns null whenever it can't answer completely, and the
+    // Opt-in Envelope Index fast path (and body index, when asked for a body
+    // match). It returns null whenever it can't answer completely, and the
     // AppleScript scan below runs as before.
     if (!local) {
       const fast = this.searchViaEnvelopeIndex(targetAccount, {
@@ -3254,8 +3288,25 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
         isRead,
         isFlagged,
         flagColorIndex,
+        body,
       });
       if (fast) return tagBackend(fast, targetAccount, "envelope-index");
+    }
+    // AppleScript can't search bodies (`content contains` pulls every body
+    // through the Apple Event bridge and times out), so a body search that the
+    // index couldn't serve is reported as not searched, never as "no matches".
+    if (body !== undefined) {
+      return {
+        messages: [],
+        diagnostics: {
+          partial: true,
+          timedOutAccounts: [],
+          skippedLargeMailboxes: [],
+          notSearchedMailboxes: [
+            `${targetAccount} (body search requires the IMAP backend or the body index)`,
+          ],
+        },
+      };
     }
     // Inside `tell account` the bare `mailboxes` is the account's; at
     // application level the local branch iterates the ownership-filtered `_mbs`.

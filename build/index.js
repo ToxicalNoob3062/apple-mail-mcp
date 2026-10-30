@@ -9337,7 +9337,7 @@ var require_thread_stream = __commonJS({
     var { version: version4 } = require_package();
     var { EventEmitter: EventEmitter7 } = __require("events");
     var { Worker } = __require("worker_threads");
-    var { join: join10 } = __require("path");
+    var { join: join12 } = __require("path");
     var { pathToFileURL } = __require("url");
     var { wait } = require_wait();
     var {
@@ -9388,7 +9388,7 @@ var require_thread_stream = __commonJS({
     function createWorker(stream, opts) {
       const { filename, workerData } = opts;
       const bundlerOverrides = "__bundlerPathsOverrides" in globalThis ? globalThis.__bundlerPathsOverrides : {};
-      const toExecute = bundlerOverrides["thread-stream-worker"] || join10(__dirname, "lib", "worker.js");
+      const toExecute = bundlerOverrides["thread-stream-worker"] || join12(__dirname, "lib", "worker.js");
       const worker = new Worker(toExecute, {
         ...opts.workerOpts,
         name: opts.workerOpts?.name || "thread-stream",
@@ -9854,9 +9854,9 @@ var require_transport = __commonJS({
   "node_modules/.pnpm/pino@10.3.1/node_modules/pino/lib/transport.js"(exports, module) {
     "use strict";
     var { createRequire: createRequire2 } = __require("module");
-    var { existsSync: existsSync7 } = __require("node:fs");
+    var { existsSync: existsSync8 } = __require("node:fs");
     var getCallers = require_caller();
-    var { join: join10, isAbsolute: isAbsolute2, sep: sep3 } = __require("node:path");
+    var { join: join12, isAbsolute: isAbsolute2, sep: sep3 } = __require("node:path");
     var { fileURLToPath } = __require("node:url");
     var sleep2 = require_atomic_sleep();
     var onExit = require_on_exit_leak_free();
@@ -9928,7 +9928,7 @@ var require_transport = __commonJS({
           return false;
         }
       }
-      return isAbsolute2(path3) && !existsSync7(path3);
+      return isAbsolute2(path3) && !existsSync8(path3);
     }
     function stripQuotes(value) {
       const first = value[0];
@@ -10009,7 +10009,7 @@ var require_transport = __commonJS({
         throw new Error("only one of target or targets can be specified");
       }
       if (targets) {
-        target = bundlerOverrides["pino-worker"] || join10(__dirname, "worker.js");
+        target = bundlerOverrides["pino-worker"] || join12(__dirname, "worker.js");
         options.targets = targets.filter((dest) => dest.target).map((dest) => {
           return {
             ...dest,
@@ -10027,7 +10027,7 @@ var require_transport = __commonJS({
           });
         });
       } else if (pipeline3) {
-        target = bundlerOverrides["pino-worker"] || join10(__dirname, "worker.js");
+        target = bundlerOverrides["pino-worker"] || join12(__dirname, "worker.js");
         options.pipelines = [pipeline3.map((dest) => {
           return {
             ...dest,
@@ -10050,7 +10050,7 @@ var require_transport = __commonJS({
           return origin;
         }
         if (origin === "pino/file") {
-          return join10(__dirname, "..", "file.js");
+          return join12(__dirname, "..", "file.js");
         }
         let fixTarget2;
         for (const filePath of callers) {
@@ -11030,7 +11030,7 @@ var require_safe_stable_stringify = __commonJS({
               return circularValue;
             }
             let res = "";
-            let join10 = ",";
+            let join12 = ",";
             const originalIndentation = indentation;
             if (Array.isArray(value)) {
               if (value.length === 0) {
@@ -11044,7 +11044,7 @@ var require_safe_stable_stringify = __commonJS({
                 indentation += spacer;
                 res += `
 ${indentation}`;
-                join10 = `,
+                join12 = `,
 ${indentation}`;
               }
               const maximumValuesToStringify = Math.min(value.length, maximumBreadth);
@@ -11052,13 +11052,13 @@ ${indentation}`;
               for (; i < maximumValuesToStringify - 1; i++) {
                 const tmp2 = stringifyFnReplacer(String(i), value, stack, replacer, spacer, indentation);
                 res += tmp2 !== void 0 ? tmp2 : "null";
-                res += join10;
+                res += join12;
               }
               const tmp = stringifyFnReplacer(String(i), value, stack, replacer, spacer, indentation);
               res += tmp !== void 0 ? tmp : "null";
               if (value.length - 1 > maximumBreadth) {
                 const removedKeys = value.length - maximumBreadth - 1;
-                res += `${join10}"... ${getItemCount(removedKeys)} not stringified"`;
+                res += `${join12}"... ${getItemCount(removedKeys)} not stringified"`;
               }
               if (spacer !== "") {
                 res += `
@@ -11079,7 +11079,7 @@ ${originalIndentation}`;
             let separator = "";
             if (spacer !== "") {
               indentation += spacer;
-              join10 = `,
+              join12 = `,
 ${indentation}`;
               whitespace = " ";
             }
@@ -11093,13 +11093,13 @@ ${indentation}`;
               const tmp = stringifyFnReplacer(key2, value, stack, replacer, spacer, indentation);
               if (tmp !== void 0) {
                 res += `${separator}${strEscape(key2)}:${whitespace}${tmp}`;
-                separator = join10;
+                separator = join12;
               }
             }
             if (keyLength > maximumBreadth) {
               const removedKeys = keyLength - maximumBreadth;
               res += `${separator}"...":${whitespace}"${getItemCount(removedKeys)} not stringified"`;
-              separator = join10;
+              separator = join12;
             }
             if (spacer !== "" && separator.length > 1) {
               res = `
@@ -11140,7 +11140,7 @@ ${originalIndentation}`;
             }
             const originalIndentation = indentation;
             let res = "";
-            let join10 = ",";
+            let join12 = ",";
             if (Array.isArray(value)) {
               if (value.length === 0) {
                 return "[]";
@@ -11153,7 +11153,7 @@ ${originalIndentation}`;
                 indentation += spacer;
                 res += `
 ${indentation}`;
-                join10 = `,
+                join12 = `,
 ${indentation}`;
               }
               const maximumValuesToStringify = Math.min(value.length, maximumBreadth);
@@ -11161,13 +11161,13 @@ ${indentation}`;
               for (; i < maximumValuesToStringify - 1; i++) {
                 const tmp2 = stringifyArrayReplacer(String(i), value[i], stack, replacer, spacer, indentation);
                 res += tmp2 !== void 0 ? tmp2 : "null";
-                res += join10;
+                res += join12;
               }
               const tmp = stringifyArrayReplacer(String(i), value[i], stack, replacer, spacer, indentation);
               res += tmp !== void 0 ? tmp : "null";
               if (value.length - 1 > maximumBreadth) {
                 const removedKeys = value.length - maximumBreadth - 1;
-                res += `${join10}"... ${getItemCount(removedKeys)} not stringified"`;
+                res += `${join12}"... ${getItemCount(removedKeys)} not stringified"`;
               }
               if (spacer !== "") {
                 res += `
@@ -11180,7 +11180,7 @@ ${originalIndentation}`;
             let whitespace = "";
             if (spacer !== "") {
               indentation += spacer;
-              join10 = `,
+              join12 = `,
 ${indentation}`;
               whitespace = " ";
             }
@@ -11189,7 +11189,7 @@ ${indentation}`;
               const tmp = stringifyArrayReplacer(key2, value[key2], stack, replacer, spacer, indentation);
               if (tmp !== void 0) {
                 res += `${separator}${strEscape(key2)}:${whitespace}${tmp}`;
-                separator = join10;
+                separator = join12;
               }
             }
             if (spacer !== "" && separator.length > 1) {
@@ -11247,20 +11247,20 @@ ${originalIndentation}`;
               indentation += spacer;
               let res2 = `
 ${indentation}`;
-              const join11 = `,
+              const join13 = `,
 ${indentation}`;
               const maximumValuesToStringify = Math.min(value.length, maximumBreadth);
               let i = 0;
               for (; i < maximumValuesToStringify - 1; i++) {
                 const tmp2 = stringifyIndent(String(i), value[i], stack, spacer, indentation);
                 res2 += tmp2 !== void 0 ? tmp2 : "null";
-                res2 += join11;
+                res2 += join13;
               }
               const tmp = stringifyIndent(String(i), value[i], stack, spacer, indentation);
               res2 += tmp !== void 0 ? tmp : "null";
               if (value.length - 1 > maximumBreadth) {
                 const removedKeys = value.length - maximumBreadth - 1;
-                res2 += `${join11}"... ${getItemCount(removedKeys)} not stringified"`;
+                res2 += `${join13}"... ${getItemCount(removedKeys)} not stringified"`;
               }
               res2 += `
 ${originalIndentation}`;
@@ -11276,16 +11276,16 @@ ${originalIndentation}`;
               return '"[Object]"';
             }
             indentation += spacer;
-            const join10 = `,
+            const join12 = `,
 ${indentation}`;
             let res = "";
             let separator = "";
             let maximumPropertiesToStringify = Math.min(keyLength, maximumBreadth);
             if (isTypedArrayWithEntries(value)) {
-              res += stringifyTypedArray(value, join10, maximumBreadth);
+              res += stringifyTypedArray(value, join12, maximumBreadth);
               keys = keys.slice(value.length);
               maximumPropertiesToStringify -= value.length;
-              separator = join10;
+              separator = join12;
             }
             if (deterministic) {
               keys = sort(keys, comparator);
@@ -11296,13 +11296,13 @@ ${indentation}`;
               const tmp = stringifyIndent(key2, value[key2], stack, spacer, indentation);
               if (tmp !== void 0) {
                 res += `${separator}${strEscape(key2)}: ${tmp}`;
-                separator = join10;
+                separator = join12;
               }
             }
             if (keyLength > maximumBreadth) {
               const removedKeys = keyLength - maximumBreadth;
               res += `${separator}"...": "${getItemCount(removedKeys)} not stringified"`;
-              separator = join10;
+              separator = join12;
             }
             if (separator !== "") {
               res = `
@@ -98732,12 +98732,12 @@ function integerNumber() {
 import { spawnSync as spawnSync4 } from "child_process";
 import {
   constants as fsConstants,
-  chmodSync,
-  existsSync as existsSync5,
+  chmodSync as chmodSync2,
+  existsSync as existsSync6,
   writeFileSync as writeFileSync4,
   readFileSync as readFileSync4,
-  readdirSync as readdirSync4,
-  unlinkSync as unlinkSync2,
+  readdirSync as readdirSync5,
+  unlinkSync as unlinkSync3,
   copyFileSync,
   renameSync as renameSync2,
   mkdtempSync as mkdtempSync2,
@@ -98745,8 +98745,8 @@ import {
   realpathSync as realpathSync2,
   lstatSync
 } from "fs";
-import { resolve as resolve4, sep as sep2, join as join8 } from "path";
-import { homedir as homedir6 } from "os";
+import { resolve as resolve4, sep as sep2, join as join10 } from "path";
+import { homedir as homedir7 } from "os";
 import { randomUUID as randomUUID2 } from "crypto";
 
 // src/utils/applescript.ts
@@ -98920,7 +98920,7 @@ function executeAppleScript(script, options = {}) {
     timeout: timeoutMs,
     maxRetries
   });
-  let lastError = null;
+  let lastError2 = null;
   const startTime = Date.now();
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     const attemptStart = Date.now();
@@ -98977,7 +98977,7 @@ function executeAppleScript(script, options = {}) {
         errorMessage,
         rawError: rawError?.substring(0, 500)
       });
-      lastError = {
+      lastError2 = {
         success: false,
         output: "",
         error: errorMessage,
@@ -98997,11 +98997,11 @@ function executeAppleScript(script, options = {}) {
         } else {
           console.error(`AppleScript error: ${errorMessage}`);
         }
-        return lastError;
+        return lastError2;
       }
     }
   }
-  return lastError;
+  return lastError2;
 }
 
 // src/services/appleMailManager.ts
@@ -99857,9 +99857,9 @@ function searchContactsDb(query, opts) {
 
 // src/utils/envelopeIndex.ts
 init_mimeParse();
-import { existsSync as existsSync4, readFileSync as readFileSync3, readdirSync as readdirSync3 } from "fs";
-import { join as join7 } from "path";
-import { homedir as homedir5 } from "os";
+import { existsSync as existsSync5, readFileSync as readFileSync3, readdirSync as readdirSync4 } from "fs";
+import { join as join8 } from "path";
+import { homedir as homedir6 } from "os";
 
 // src/utils/emlx.ts
 import { existsSync as existsSync3, readdirSync as readdirSync2 } from "fs";
@@ -99896,9 +99896,587 @@ function htmlToText(html) {
   return html.replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ").replace(/<br\s*\/?>|<\/(p|div|tr|li|h[1-6])>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&quot;/gi, '"').replace(/&#39;/gi, "'").replace(/&amp;/gi, "&").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n\n").trim();
 }
 
+// src/utils/bodyIndex.ts
+init_mimeParse();
+import {
+  chmodSync,
+  closeSync,
+  existsSync as existsSync4,
+  fstatSync,
+  mkdirSync as mkdirSync3,
+  openSync,
+  readdirSync as readdirSync3,
+  readSync,
+  statSync as statSync2,
+  unlinkSync as unlinkSync2
+} from "fs";
+import { basename, dirname as dirname3, join as join7 } from "path";
+import { homedir as homedir5 } from "os";
+var BODY_INDEX_FILE_ENV = "APPLE_MAIL_MCP_BODY_INDEX_FILE";
+var BODY_INDEX_APPLICATION_ID = 1095582281;
+var BODY_INDEX_SCHEMA_VERSION = 3;
+var MAX_EMLX_BYTES = 25 * 1024 * 1024;
+var MAX_BODY_CHARS = 1e5;
+var INDEX_BATCH = 200;
+var DocState = {
+  /** On disk, not indexed yet (new, or changed since it was indexed). */
+  queued: 0,
+  /** Indexed from a complete download. */
+  indexed: 1,
+  /**
+   * A `.partial.emlx` with no body text: Mail has only the headers (or only
+   * attachment stubs). A partial file that does carry its text part — the
+   * usual case, where only attachments weren't downloaded — is `indexed`.
+   */
+  partial: 2,
+  /** Larger than {@link MAX_EMLX_BYTES}; not read. */
+  tooLarge: 3
+};
+function bodyIndexPath(env = process.env) {
+  const override = env[BODY_INDEX_FILE_ENV];
+  if (override && override.trim()) return override.trim();
+  return join7(homedir5(), "Library", "Application Support", "apple-mail-mcp", "body-index.db");
+}
+function bodyIndexLockPath(indexPath) {
+  return `${indexPath}.writer-lock`;
+}
+function messageIdFromFilename(name2) {
+  const m = /^(\d+)(\.partial)?\.emlx$/.exec(name2);
+  return m ? Number(m[1]) : null;
+}
+function parseEmlxBody(bytes) {
+  const source = emlxSource(bytes);
+  if (source === null) return null;
+  const text = extractTextBody(source) ?? htmlToText(extractHtmlBody(source) ?? "");
+  const normalized2 = text.replace(/\s+/g, " ").trim();
+  return normalized2 ? normalized2.slice(0, MAX_BODY_CHARS) : null;
+}
+function ftsPhrase(text) {
+  return `"${text.replace(/"/g, '""')}"`;
+}
+var fts5Checked = null;
+function fts5Unsupported(sqlite) {
+  if (fts5Checked?.module === sqlite) return fts5Checked.reason;
+  let reason = null;
+  let db = null;
+  try {
+    db = new sqlite.DatabaseSync(":memory:");
+    db.exec(`CREATE VIRTUAL TABLE t USING fts5(x, content = '', contentless_delete = 1)`);
+  } catch (err) {
+    reason = `the bundled SQLite lacks FTS5 contentless_delete (needs SQLite 3.43+): ` + (err instanceof Error ? err.message : String(err));
+  } finally {
+    try {
+      db?.close();
+    } catch {
+    }
+  }
+  fts5Checked = { module: sqlite, reason };
+  return reason;
+}
+var SQLITE_MAGIC = "SQLite format 3\0";
+function inspectIndexFile(path3) {
+  let fd;
+  try {
+    fd = openSync(path3, "r");
+  } catch {
+    return existsSync4(path3) ? "foreign" : "missing";
+  }
+  try {
+    if (fstatSync(fd).size === 0) return "empty";
+    const header = Buffer.alloc(100);
+    const n = readSync(fd, header, 0, 100, 0);
+    if (n < 100 || header.toString("latin1", 0, 16) !== SQLITE_MAGIC) return "foreign";
+    return header.readUInt32BE(68) === BODY_INDEX_APPLICATION_ID ? "ours" : "foreign";
+  } finally {
+    closeSync(fd);
+  }
+}
+function ensurePrivateDir(dir) {
+  if (existsSync4(dir)) return;
+  mkdirSync3(dir, { recursive: true, mode: 448 });
+  chmodSync(dir, 448);
+}
+function ensurePrivateFile(path3) {
+  closeSync(openSync(path3, "a", 384));
+  chmodSync(path3, 384);
+}
+function privateSidecars(path3) {
+  for (const p of [`${path3}-wal`, `${path3}-shm`]) {
+    try {
+      chmodSync(p, 384);
+    } catch {
+    }
+  }
+}
+function removeIndexFiles(path3) {
+  for (const p of [path3, `${path3}-wal`, `${path3}-shm`]) {
+    try {
+      unlinkSync2(p);
+    } catch {
+    }
+  }
+}
+function stampMismatch(db, schema = "main") {
+  const appId = Number(db.prepare(`PRAGMA ${schema}.application_id`).get()?.application_id ?? 0);
+  if (appId !== BODY_INDEX_APPLICATION_ID) {
+    return "the file at the body index path is not an apple-mail-mcp body index";
+  }
+  const version4 = Number(db.prepare(`PRAGMA ${schema}.user_version`).get()?.user_version ?? 0);
+  if (version4 !== BODY_INDEX_SCHEMA_VERSION) {
+    return `body index is being rebuilt (schema v${version4}, this server expects v${BODY_INDEX_SCHEMA_VERSION})`;
+  }
+  return null;
+}
+var SCHEMA_SQL = `
+  CREATE TABLE IF NOT EXISTS docs (
+    id INTEGER PRIMARY KEY,
+    path TEXT NOT NULL,
+    mtime INTEGER NOT NULL,
+    size INTEGER NOT NULL,
+    state INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS docs_state ON docs (state, id);
+  CREATE VIRTUAL TABLE IF NOT EXISTS bodies
+    USING fts5(body, content = '', contentless_delete = 1,
+               tokenize = 'unicode61 remove_diacritics 2');
+  CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+`;
+function readIndexState(db, schema = "main") {
+  const counts = { indexed: 0, queued: 0, partial: 0, tooLarge: 0 };
+  for (const r of db.prepare(`SELECT state, count(*) AS n FROM ${schema}.docs GROUP BY state`).all()) {
+    const n = Number(r.n);
+    switch (Number(r.state)) {
+      case DocState.queued:
+        counts.queued = n;
+        break;
+      case DocState.indexed:
+        counts.indexed = n;
+        break;
+      case DocState.partial:
+        counts.partial = n;
+        break;
+      case DocState.tooLarge:
+        counts.tooLarge = n;
+        break;
+    }
+  }
+  const meta3 = {};
+  for (const r of db.prepare(`SELECT key, value FROM ${schema}.meta`).all()) {
+    const key = String(r.key);
+    const value = String(r.value);
+    if (key === "lastWalkMs" || key === "lastWalkFiles") meta3[key] = Number(value);
+    else if (key === "lastFullWalk" || key === "lastRebuild" || key === "lastError") {
+      meta3[key] = value;
+    }
+  }
+  return { counts, meta: meta3 };
+}
+var ATTACH_ALIAS = "bi";
+function bodyMatchClause(text) {
+  return {
+    sql: `m.ROWID IN (SELECT rowid FROM ${ATTACH_ALIAS}.bodies WHERE bodies MATCH ?)`,
+    args: [ftsPhrase(text)]
+  };
+}
+function scopeCoverage(db, fromSql, where, args) {
+  const row = db.prepare(
+    `SELECT
+         sum(d.id IS NULL) AS missing,
+         sum(d.state = ${DocState.queued}) AS queued,
+         sum(d.state = ${DocState.partial}) AS partial,
+         sum(d.state = ${DocState.tooLarge}) AS too_large
+       ${fromSql}
+       LEFT JOIN ${ATTACH_ALIAS}.docs d ON d.id = m.ROWID
+       WHERE ${where.join(" AND ")}`
+  ).get(...args);
+  return {
+    notDownloaded: Number(row?.missing ?? 0),
+    notIndexedYet: Number(row?.queued ?? 0),
+    partlyDownloaded: Number(row?.partial ?? 0),
+    tooLarge: Number(row?.too_large ?? 0)
+  };
+}
+function isScopeComplete(c) {
+  return c.notDownloaded + c.notIndexedYet + c.partlyDownloaded + c.tooLarge === 0;
+}
+function describeScopeGap(c) {
+  const fmt = (n) => n.toLocaleString("en-US");
+  const parts = [];
+  if (c.notDownloaded) parts.push(`${fmt(c.notDownloaded)} messages not downloaded`);
+  if (c.notIndexedYet) parts.push(`${fmt(c.notIndexedYet)} not indexed yet`);
+  if (c.partlyDownloaded) parts.push(`${fmt(c.partlyDownloaded)} with no body downloaded yet`);
+  if (c.tooLarge) parts.push(`${fmt(c.tooLarge)} over the 25 MB size cap`);
+  return parts.join(", ");
+}
+var realClock = { now: () => Date.now(), monotonic: () => performance.now() };
+var StoreWalk = class {
+  constructor(versionDir) {
+    this.versionDir = versionDir;
+    this.stack = [versionDir];
+  }
+  versionDir;
+  stack;
+  seen = /* @__PURE__ */ new Set();
+  workMs = 0;
+  get files() {
+    return this.seen.size;
+  }
+  /** List directories until `deadline`; true when the walk has covered everything. */
+  step(deadline, clock2, onFile) {
+    while (this.stack.length > 0 && clock2.monotonic() < deadline) {
+      const dir = this.stack.pop();
+      let entries;
+      try {
+        entries = readdirSync3(dir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      const names = new Set(entries.map((e) => e.name));
+      for (const e of entries) {
+        const full = join7(dir, e.name);
+        if (e.isDirectory()) {
+          if (!(dir === this.versionDir && e.name === "MailData")) this.stack.push(full);
+          continue;
+        }
+        const id = messageIdFromFilename(e.name);
+        if (id === null || this.seen.has(id)) continue;
+        if (e.name.endsWith(".partial.emlx") && names.has(`${id}.emlx`)) continue;
+        let st;
+        try {
+          st = statSync2(full);
+        } catch {
+          continue;
+        }
+        this.seen.add(id);
+        onFile(id, full, Math.floor(st.mtimeMs), st.size);
+      }
+    }
+    return this.stack.length === 0;
+  }
+  /** Ids found on disk by the finished walk. */
+  has(id) {
+    return this.seen.has(id);
+  }
+};
+var BodyIndexWriter = class _BodyIndexWriter {
+  constructor(versionDir, path3, db, rebuilt, clock2) {
+    this.versionDir = versionDir;
+    this.path = path3;
+    this.clock = clock2;
+    this.db = db;
+    this.rebuilt = rebuilt;
+  }
+  versionDir;
+  path;
+  clock;
+  db;
+  walk = null;
+  lastWalkDone = 0;
+  /** Set when this open rebuilt the file; surfaced once in diagnostics. */
+  rebuilt;
+  /**
+   * Open (creating if needed) the index at `path`. Refuses a file that isn't
+   * ours; rebuilds one of ours that is corrupt or has an older layout.
+   */
+  static open(versionDir, path3, sqlite, clock2 = realClock) {
+    const unsupported = fts5Unsupported(sqlite);
+    if (unsupported) return { reason: unsupported };
+    const what = inspectIndexFile(path3);
+    if (what === "foreign") {
+      return {
+        reason: `${path3} exists and is not an apple-mail-mcp body index; leaving it untouched (set APPLE_MAIL_MCP_BODY_INDEX_FILE to another path)`
+      };
+    }
+    ensurePrivateDir(dirname3(path3));
+    let rebuilt = null;
+    const tryOpen = () => {
+      ensurePrivateFile(path3);
+      const db2 = new sqlite.DatabaseSync(path3);
+      try {
+        db2.exec(`PRAGMA busy_timeout = 5000`);
+        db2.prepare(`SELECT count(*) FROM sqlite_master`).get();
+        return db2;
+      } catch (err) {
+        try {
+          db2.close();
+        } catch {
+        }
+        throw err;
+      }
+    };
+    let db;
+    try {
+      db = tryOpen();
+    } catch (err) {
+      rebuilt = `unreadable index file (${err instanceof Error ? err.message : String(err)})`;
+      removeIndexFiles(path3);
+      try {
+        db = tryOpen();
+      } catch (err2) {
+        return {
+          reason: `body index could not be created: ${err2 instanceof Error ? err2.message : String(err2)}`
+        };
+      }
+    }
+    try {
+      const version4 = Number(db.prepare(`PRAGMA user_version`).get()?.user_version ?? 0);
+      if (what === "ours" && version4 !== BODY_INDEX_SCHEMA_VERSION) {
+        rebuilt ??= `schema v${version4} \u2192 v${BODY_INDEX_SCHEMA_VERSION}`;
+        db.exec(
+          `DROP TABLE IF EXISTS docs; DROP TABLE IF EXISTS bodies; DROP TABLE IF EXISTS meta;`
+        );
+      }
+      db.exec(`
+        PRAGMA journal_mode = WAL;
+        PRAGMA application_id = ${BODY_INDEX_APPLICATION_ID};
+        ${SCHEMA_SQL}
+        PRAGMA user_version = ${BODY_INDEX_SCHEMA_VERSION};
+      `);
+      privateSidecars(path3);
+      const w = new _BodyIndexWriter(versionDir, path3, db, rebuilt, clock2);
+      if (rebuilt) w.setMeta("lastRebuild", `${new Date(clock2.now()).toISOString()} (${rebuilt})`);
+      return w;
+    } catch (err) {
+      try {
+        db.close();
+      } catch {
+      }
+      return {
+        reason: `body index could not be opened: ${err instanceof Error ? err.message : String(err)}`
+      };
+    }
+  }
+  setMeta(key, value) {
+    this.db.prepare(
+      `INSERT INTO meta (key, value) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+    ).run(key, String(value));
+  }
+  /** Whether a full walk is running. */
+  get walking() {
+    return this.walk !== null;
+  }
+  /** Whether a full walk is due (`intervalMs` since the last one finished, or never ran). */
+  walkDue(intervalMs) {
+    return this.walk === null && (this.lastWalkDone === 0 || this.clock.now() - this.lastWalkDone >= intervalMs);
+  }
+  /** Start a full walk now (no-op while one is running). */
+  startWalk() {
+    this.walk ??= new StoreWalk(this.versionDir);
+  }
+  /**
+   * Run the current walk for up to `budgetMs`. Returns true when it finished
+   * in this slice (and the cleanup of vanished files ran).
+   */
+  walkStep(budgetMs) {
+    const walk = this.walk;
+    if (!walk) return false;
+    const t0 = this.clock.monotonic();
+    const get = this.prep(`SELECT path, mtime, size FROM docs WHERE id = ?`);
+    const queue = this.prep(
+      `INSERT INTO docs (id, path, mtime, size, state) VALUES (?, ?, ?, ?, ${DocState.queued})
+       ON CONFLICT(id) DO UPDATE SET path = excluded.path, mtime = excluded.mtime,
+         size = excluded.size, state = ${DocState.queued}`
+    );
+    let finished3;
+    this.db.exec("BEGIN");
+    try {
+      finished3 = walk.step(t0 + budgetMs, this.clock, (id, path3, mtime, size) => {
+        const known = get.get(id);
+        if (!known || String(known.path) !== path3 || Number(known.mtime) !== mtime || Number(known.size) !== size) {
+          queue.run(id, path3, mtime, size);
+        }
+      });
+      if (finished3) this.dropMissing(walk);
+      this.db.exec("COMMIT");
+    } catch (err) {
+      this.db.exec("ROLLBACK");
+      throw err;
+    }
+    walk.workMs += this.clock.monotonic() - t0;
+    if (finished3) {
+      this.walk = null;
+      this.lastWalkDone = this.clock.now();
+      this.setMeta("lastFullWalk", new Date(this.lastWalkDone).toISOString());
+      this.setMeta("lastWalkMs", Math.round(walk.workMs));
+      this.setMeta("lastWalkFiles", walk.files);
+    }
+    return finished3;
+  }
+  dropMissing(walk) {
+    const gone = [];
+    for (const r of this.prep(`SELECT id FROM docs`).all()) {
+      const id = Number(r.id);
+      if (!walk.has(id)) gone.push(id);
+    }
+    if (gone.length === 0) return;
+    const delDoc = this.prep(`DELETE FROM docs WHERE id = ?`);
+    const delBody = this.deleteBodyStatement();
+    for (const id of gone) {
+      delDoc.run(id);
+      delBody.run(id);
+    }
+  }
+  deleteBodyStatement() {
+    return this.prep(`DELETE FROM bodies WHERE rowid = ?`);
+  }
+  /**
+   * Prepare a statement that reads integers as BigInt. FTS5's own writes can
+   * leave the connection's last-insert rowid above 2^53, and from then on
+   * node:sqlite's `run()` throws while reporting it — on any statement, not
+   * just the one that caused it. Every value read here goes through Number()
+   * or String(), which take a BigInt.
+   */
+  prep(sql) {
+    const s = this.db.prepare(sql);
+    s.setReadBigInts(true);
+    return s;
+  }
+  /** Whether any message is waiting to be indexed. */
+  hasQueued() {
+    return this.prep(`SELECT 1 AS x FROM docs WHERE state = ${DocState.queued} LIMIT 1`).get() !== void 0;
+  }
+  /**
+   * Index queued messages, newest id first, until `budgetMs` has passed.
+   * Returns how many were processed. A file that can't be read or carries no
+   * text is still marked done, so it isn't retried on every step.
+   */
+  indexStep(budgetMs) {
+    const deadline = this.clock.monotonic() + budgetMs;
+    const next = this.prep(
+      `SELECT id, path FROM docs WHERE state = ${DocState.queued} ORDER BY id DESC LIMIT ${INDEX_BATCH}`
+    );
+    const setState = this.prep(`UPDATE docs SET state = ? WHERE id = ?`);
+    const delBody = this.deleteBodyStatement();
+    const addBody = this.prep(`INSERT INTO bodies (rowid, body) VALUES (?, ?)`);
+    let done = 0;
+    while (this.clock.monotonic() < deadline) {
+      const batch = next.all();
+      if (batch.length === 0) break;
+      this.db.exec("BEGIN");
+      try {
+        for (const r of batch) {
+          if (done > 0 && this.clock.monotonic() >= deadline) break;
+          const id = Number(r.id);
+          const path3 = String(r.path);
+          const read = readEmlxCapped(path3);
+          delBody.run(id);
+          if (read === "tooLarge") {
+            setState.run(DocState.tooLarge, id);
+          } else {
+            const text = read === null ? null : parseEmlxBody(read);
+            if (text) addBody.run(id, text);
+            const bodyMissing = !text && path3.endsWith(".partial.emlx");
+            setState.run(bodyMissing ? DocState.partial : DocState.indexed, id);
+          }
+          done++;
+        }
+        this.db.exec("COMMIT");
+      } catch (err) {
+        this.db.exec("ROLLBACK");
+        throw err;
+      }
+    }
+    return done;
+  }
+  /**
+   * Apply changes reported for individual `.emlx` paths (from the file
+   * watcher), without a walk. A path that exists is queued if new or changed;
+   * a path that is gone drops its row if the row still points there (a moved
+   * message keeps its id and is queued again from its new path by its own
+   * event, whichever event comes first). A `.partial` file is ignored while
+   * the full file for the same id exists.
+   */
+  applyChanges(paths) {
+    const get = this.prep(`SELECT path, mtime, size FROM docs WHERE id = ?`);
+    const queue = this.prep(
+      `INSERT INTO docs (id, path, mtime, size, state) VALUES (?, ?, ?, ?, ${DocState.queued})
+       ON CONFLICT(id) DO UPDATE SET path = excluded.path, mtime = excluded.mtime,
+         size = excluded.size, state = ${DocState.queued}`
+    );
+    const delDoc = this.prep(`DELETE FROM docs WHERE id = ?`);
+    const delBody = this.deleteBodyStatement();
+    this.db.exec("BEGIN");
+    try {
+      for (const path3 of paths) {
+        const name2 = basename(path3);
+        const id = messageIdFromFilename(name2);
+        if (id === null) continue;
+        let st;
+        try {
+          st = statSync2(path3);
+        } catch {
+          st = null;
+        }
+        const known = get.get(id);
+        if (!st) {
+          if (known && String(known.path) === path3) {
+            delDoc.run(id);
+            delBody.run(id);
+          }
+          continue;
+        }
+        if (name2.endsWith(".partial.emlx") && existsSync4(join7(dirname3(path3), `${id}.emlx`))) {
+          continue;
+        }
+        const mtime = Math.floor(st.mtimeMs);
+        if (known && String(known.path) === path3 && Number(known.mtime) === mtime && Number(known.size) === st.size) {
+          continue;
+        }
+        queue.run(id, path3, mtime, st.size);
+      }
+      this.db.exec("COMMIT");
+    } catch (err) {
+      this.db.exec("ROLLBACK");
+      throw err;
+    }
+  }
+  /** Counts and meta as stored. */
+  state() {
+    return readIndexState(this.db);
+  }
+  close() {
+    try {
+      this.db.close();
+    } catch {
+    }
+  }
+};
+var READ_BUFFER_BYTES = 1024 * 1024;
+var readBuffer = Buffer.allocUnsafe(0);
+function readEmlxCapped(path3) {
+  let fd;
+  try {
+    fd = openSync(path3, "r");
+  } catch {
+    return null;
+  }
+  try {
+    const size = fstatSync(fd).size;
+    if (size > MAX_EMLX_BYTES) return "tooLarge";
+    let buf = readBuffer;
+    if (buf.length < size) {
+      buf = Buffer.allocUnsafe(Math.max(size, READ_BUFFER_BYTES));
+      if (buf.length === READ_BUFFER_BYTES) readBuffer = buf;
+    }
+    let off = 0;
+    while (off < size) {
+      const n = readSync(fd, buf, off, size - off, off);
+      if (n === 0) break;
+      off += n;
+    }
+    return buf.subarray(0, off);
+  } catch {
+    return null;
+  } finally {
+    closeSync(fd);
+  }
+}
+
 // src/utils/envelopeIndex.ts
 var ENVELOPE_INDEX_ENV = "APPLE_MAIL_MCP_ENVELOPE_INDEX";
 var MAIL_DIR_ENV = "APPLE_MAIL_MCP_MAIL_DIR";
+var FULL_DISK_ACCESS_REASON = "Envelope Index not readable (grant Full Disk Access to the server's Node runtime)";
 function isTruthyFlag(value) {
   return value !== void 0 && /^(1|true|yes|on)$/i.test(value.trim());
 }
@@ -99919,20 +100497,20 @@ function loadSqlite2() {
 function mailRoot(env = process.env) {
   const override = env[MAIL_DIR_ENV];
   if (override && override.trim()) return override.trim();
-  return join7(homedir5(), "Library", "Mail");
+  return join8(homedir6(), "Library", "Mail");
 }
 function resolveMailStore(root = mailRoot()) {
   let entries;
   try {
-    entries = readdirSync3(root);
+    entries = readdirSync4(root);
   } catch {
     return null;
   }
   const versions = entries.map((e) => /^V(\d+)$/.exec(e)).filter((m) => m !== null).sort((a, b) => Number(b[1]) - Number(a[1]));
   for (const v of versions) {
-    const versionDir = join7(root, v[0]);
-    const indexPath = join7(versionDir, "MailData", "Envelope Index");
-    if (existsSync4(indexPath)) return { versionDir, indexPath };
+    const versionDir = join8(root, v[0]);
+    const indexPath = join8(versionDir, "MailData", "Envelope Index");
+    if (existsSync5(indexPath)) return { versionDir, indexPath };
   }
   return null;
 }
@@ -100080,6 +100658,19 @@ function searchOpenIndex(db, features, params) {
     where.push(`m.ROWID IN (SELECT value FROM json_each(?))`);
     args.push(JSON.stringify(params.rowIds));
   }
+  const fromSql = `
+    FROM messages m
+    LEFT JOIN subjects s ON m.subject = s.ROWID
+    LEFT JOIN addresses a ON m.sender = a.ROWID
+    LEFT JOIN mailboxes mb ON m.mailbox = mb.ROWID`;
+  const bodyCoverage = params.body ? scopeCoverage(db, fromSql, where, args) : void 0;
+  const filterWhere = [...where];
+  const filterArgs = [...args];
+  if (params.body) {
+    const clause = bodyMatchClause(params.body.text);
+    filterWhere.push(clause.sql);
+    filterArgs.push(...clause.args);
+  }
   const sql = `
     SELECT m.ROWID AS id,
            ${subjectExpr} AS subject,
@@ -100091,17 +100682,15 @@ function searchOpenIndex(db, features, params) {
            m.flagged AS is_flagged,
            mb.url AS url,
            ${features.attachments ? "EXISTS (SELECT 1 FROM attachments t WHERE t.message = m.ROWID)" : "0"} AS has_attachments
-    FROM messages m
-    LEFT JOIN subjects s ON m.subject = s.ROWID
-    LEFT JOIN addresses a ON m.sender = a.ROWID
-    LEFT JOIN mailboxes mb ON m.mailbox = mb.ROWID
-    WHERE ${where.join(" AND ")}
+    ${fromSql}
+    WHERE ${filterWhere.join(" AND ")}
     ORDER BY m.date_received DESC
     LIMIT ?`;
-  args.push(params.limit);
-  const rows = db.prepare(sql).all(...args);
+  filterArgs.push(params.limit);
+  const rows = db.prepare(sql).all(...filterArgs);
   return {
     ok: true,
+    ...bodyCoverage ? { bodyCoverage } : {},
     rows: rows.map((r) => {
       const address = typeof r.address === "string" ? r.address : "";
       const name2 = typeof r.comment === "string" ? r.comment.trim() : "";
@@ -100130,7 +100719,7 @@ function searchEnvelopeIndex(params, opts = {}) {
   if (!indexPath) {
     return {
       ok: false,
-      reason: "Envelope Index not readable (grant Full Disk Access to the server's Node runtime)"
+      reason: FULL_DISK_ACCESS_REASON
     };
   }
   let db = null;
@@ -100139,6 +100728,18 @@ function searchEnvelopeIndex(params, opts = {}) {
     const features = checkSchema(db);
     if ("mismatch" in features) {
       return { ok: false, reason: `unexpected Envelope Index schema: ${features.mismatch}` };
+    }
+    if (params.body) {
+      try {
+        db.prepare(`ATTACH DATABASE ? AS ${ATTACH_ALIAS}`).run(params.body.indexFile);
+        const mismatch = stampMismatch(db, ATTACH_ALIAS);
+        if (mismatch) return { ok: false, reason: mismatch };
+      } catch (err) {
+        return {
+          ok: false,
+          reason: `body index unreadable: ${err instanceof Error ? err.message : String(err)}`
+        };
+      }
     }
     return searchOpenIndex(db, features, params);
   } catch (err) {
@@ -100159,7 +100760,7 @@ function readMessageFromStore(id, opts = {}) {
   const store = opts.store === void 0 ? resolveMailStore() : opts.store;
   if (!store) {
     return {
-      reason: "Envelope Index not readable (grant Full Disk Access to the server's Node runtime)"
+      reason: FULL_DISK_ACCESS_REASON
     };
   }
   let db = null;
@@ -100217,6 +100818,286 @@ function readMessageFromStore(id, opts = {}) {
     };
   }
   return { reason: `no readable .emlx for message ${id} under ${location.path}` };
+}
+
+// src/utils/bodyIndexSync.ts
+import { watch as fsWatch } from "fs";
+import { dirname as dirname4, join as join9 } from "path";
+var BODY_INDEX_ENV = "APPLE_MAIL_MCP_BODY_INDEX";
+var RESCAN_WATCHED_MS = 10 * 6e4;
+var RESCAN_UNWATCHED_MS = 5 * 6e4;
+var WATCH_DEBOUNCE_MS = 1500;
+var WRITER_RETRY_MS = 3e4;
+var SLICE_MS = 50;
+var PAUSE_MS = 100;
+var SEARCH_CATCHUP_MS = 50;
+function isBodyIndexEnabled(env = process.env) {
+  return isTruthyFlag(env[BODY_INDEX_ENV]) && isEnvelopeIndexEnabled(env);
+}
+var fsEventsWatch = (dir, onEvent, onError) => {
+  const w = fsWatch(
+    dir,
+    { recursive: true, persistent: false },
+    (eventType, filename) => onEvent(eventType, filename === null ? null : String(filename))
+  );
+  w.on("error", onError);
+  return w;
+};
+var watchImpl = fsEventsWatch;
+var clock = realClock;
+var sqliteOverride;
+var writer = null;
+var writerLock = null;
+var watcher = null;
+var backgroundTimer = null;
+var debounceTimer = null;
+var running = false;
+var changedPaths = /* @__PURE__ */ new Set();
+var walkRequested = false;
+var lastError = null;
+function sqliteModule() {
+  return sqliteOverride === void 0 ? loadSqlite2() : sqliteOverride;
+}
+function errText3(err) {
+  return err instanceof Error ? err.message : String(err);
+}
+function noteError(where, err) {
+  lastError = `${new Date(clock.now()).toISOString()} ${where}: ${errText3(err)}`;
+  console.error(`[bodyIndex] ${where}: ${errText3(err)}`);
+  try {
+    writer?.setMeta("lastError", lastError);
+  } catch {
+  }
+}
+function bodyIndexUnavailable() {
+  if (!isBodyIndexEnabled()) return "body index disabled";
+  const sqlite = sqliteModule();
+  if (!sqlite) return "node:sqlite unavailable (requires Node >= 22.5)";
+  const fts = fts5Unsupported(sqlite);
+  if (fts) return fts;
+  if (!resolveMailStore()) return FULL_DISK_ACCESS_REASON;
+  return null;
+}
+function tryAcquireWriterLock(sqlite, indexPath) {
+  if (writerLock) return true;
+  let db = null;
+  try {
+    const lockPath = bodyIndexLockPath(indexPath);
+    ensurePrivateDir(dirname4(lockPath));
+    ensurePrivateFile(lockPath);
+    db = new sqlite.DatabaseSync(lockPath);
+    db.exec("PRAGMA busy_timeout = 0");
+    db.exec("PRAGMA journal_mode = MEMORY");
+    db.exec("BEGIN EXCLUSIVE");
+    writerLock = db;
+    return true;
+  } catch {
+    try {
+      db?.close();
+    } catch {
+    }
+    return false;
+  }
+}
+function releaseWriterLock() {
+  if (!writerLock) return;
+  try {
+    writerLock.exec("ROLLBACK");
+  } catch {
+  }
+  try {
+    writerLock.close();
+  } catch {
+  }
+  writerLock = null;
+}
+function claimWriter() {
+  if (writer) return writer;
+  const sqlite = sqliteModule();
+  const store = resolveMailStore();
+  if (!sqlite || !store) return null;
+  const path3 = bodyIndexPath();
+  if (!tryAcquireWriterLock(sqlite, path3)) return null;
+  const opened = BodyIndexWriter.open(store.versionDir, path3, sqlite, clock);
+  if ("reason" in opened) {
+    releaseWriterLock();
+    noteError("open", opened.reason);
+    return null;
+  }
+  writer = opened;
+  if (opened.rebuilt) console.error(`[bodyIndex] rebuilt the index: ${opened.rebuilt}`);
+  console.error("[bodyIndex] writer: this instance keeps the index current");
+  if (running) startWatching(opened);
+  return writer;
+}
+function startWatching(w) {
+  if (watcher) return;
+  try {
+    watcher = watchImpl(
+      w.versionDir,
+      (eventType, filename) => {
+        if (filename === null) {
+          walkRequested = true;
+        } else if (filename.endsWith(".emlx")) {
+          if (filename.split("/")[0] === "MailData") return;
+          changedPaths.add(join9(w.versionDir, filename));
+        } else if (eventType === "rename" && filename.endsWith(".mbox")) {
+          walkRequested = true;
+        } else {
+          return;
+        }
+        scheduleBatch();
+      },
+      (err) => {
+        noteError("file watcher stopped, using timed walks", err);
+        stopWatching();
+        walkRequested = true;
+        wake(0);
+      }
+    );
+  } catch (err) {
+    noteError("file watcher unavailable, using timed walks", err);
+    watcher = null;
+  }
+}
+function stopWatching() {
+  try {
+    watcher?.close();
+  } catch {
+  }
+  watcher = null;
+}
+function scheduleBatch() {
+  if (debounceTimer) return;
+  debounceTimer = setTimeout(() => {
+    debounceTimer = null;
+    wake(0);
+  }, WATCH_DEBOUNCE_MS);
+  debounceTimer.unref?.();
+}
+function flushChanges(w) {
+  if (debounceTimer) clearTimeout(debounceTimer);
+  debounceTimer = null;
+  if (walkRequested) {
+    walkRequested = false;
+    changedPaths.clear();
+    w.startWalk();
+    return;
+  }
+  if (changedPaths.size === 0) return;
+  const batch = [...changedPaths];
+  changedPaths.clear();
+  w.applyChanges(batch);
+}
+function wake(delay) {
+  if (!running) return;
+  if (backgroundTimer) clearTimeout(backgroundTimer);
+  backgroundTimer = setTimeout(tick, delay);
+  backgroundTimer.unref?.();
+}
+function tick() {
+  backgroundTimer = null;
+  const w = claimWriter();
+  if (!w) {
+    wake(WRITER_RETRY_MS);
+    return;
+  }
+  const interval = watcher ? RESCAN_WATCHED_MS : RESCAN_UNWATCHED_MS;
+  try {
+    flushChanges(w);
+    if (w.walkDue(interval)) w.startWalk();
+    if (w.walking) {
+      w.walkStep(SLICE_MS);
+      wake(PAUSE_MS);
+      return;
+    }
+    if (w.hasQueued()) {
+      w.indexStep(SLICE_MS);
+      wake(PAUSE_MS);
+      return;
+    }
+  } catch (err) {
+    noteError("indexing step failed", err);
+  }
+  wake(interval);
+}
+function startBackgroundIndexing() {
+  if (running) return;
+  const unavailable = bodyIndexUnavailable();
+  if (unavailable) {
+    if (isBodyIndexEnabled()) {
+      lastError = unavailable;
+      console.error(`[bodyIndex] not started: ${unavailable}`);
+    }
+    return;
+  }
+  running = true;
+  const w = claimWriter();
+  if (w) startWatching(w);
+  else console.error("[bodyIndex] reader: another server instance keeps the index current");
+  wake(PAUSE_MS);
+}
+function stopBodyIndexing() {
+  running = false;
+  if (backgroundTimer) clearTimeout(backgroundTimer);
+  backgroundTimer = null;
+  if (debounceTimer) clearTimeout(debounceTimer);
+  debounceTimer = null;
+  stopWatching();
+  changedPaths.clear();
+  walkRequested = false;
+  writer?.close();
+  writer = null;
+  releaseWriterLock();
+}
+function prepareBodySearch() {
+  const unavailable = bodyIndexUnavailable();
+  if (unavailable) return { ok: false, reason: unavailable };
+  const path3 = bodyIndexPath();
+  const w = claimWriter();
+  if (w) {
+    try {
+      flushChanges(w);
+      if (!w.walking && w.hasQueued()) w.indexStep(SEARCH_CATCHUP_MS);
+    } catch (err) {
+      noteError("search catch-up failed", err);
+    }
+  } else if (inspectIndexFile(path3) === "missing") {
+    return { ok: false, reason: "body index not created yet" };
+  }
+  return { ok: true, file: path3 };
+}
+function bodyIndexStatus() {
+  if (!isBodyIndexEnabled()) return { enabled: false };
+  const unavailable = bodyIndexUnavailable();
+  if (unavailable) return { enabled: true, unavailable, ...lastError ? { lastError } : {} };
+  const path3 = bodyIndexPath();
+  const status = {
+    enabled: true,
+    path: path3,
+    role: writer ? "writer" : "reader",
+    watching: watcher !== null,
+    ...lastError ? { lastError } : {}
+  };
+  try {
+    if (writer) {
+      Object.assign(status, writer.state());
+    } else if (inspectIndexFile(path3) === "ours") {
+      const db = new (sqliteModule()).DatabaseSync(path3, { readOnly: true });
+      try {
+        const mismatch = stampMismatch(db);
+        if (mismatch) status.unavailable = mismatch;
+        else Object.assign(status, readIndexState(db));
+      } finally {
+        db.close();
+      }
+    } else {
+      status.unavailable = "index file not created yet";
+    }
+  } catch (err) {
+    status.unavailable = `index unreadable: ${errText3(err)}`;
+  }
+  return status;
 }
 
 // src/services/appleMailManager.ts
@@ -100490,7 +101371,7 @@ function splitSearchDiagnostics(output2, account) {
   }
   return { payload, diagnostics };
 }
-var ALLOWED_SAVE_ROOTS = [homedir6(), "/tmp", "/private/tmp", "/Volumes"];
+var ALLOWED_SAVE_ROOTS = [homedir7(), "/tmp", "/private/tmp", "/Volumes"];
 function isPathWithinAllowedRoots(resolvedPath) {
   return ALLOWED_SAVE_ROOTS.some((root) => {
     const base2 = root.endsWith(sep2) ? root.slice(0, -1) : root;
@@ -100511,7 +101392,7 @@ function resolveAttachmentSaveTarget(savePath, attachmentName) {
   if (!isPathWithinAllowedRoots(savedPath)) {
     throw new Error(`Output path "${savedPath}" is outside allowed directories`);
   }
-  if (existsSync5(savedPath)) {
+  if (existsSync6(savedPath)) {
     if (lstatSync(savedPath).isSymbolicLink()) {
       throw new Error(`Refusing to overwrite symbolic link "${savedPath}"`);
     }
@@ -101792,7 +102673,8 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
     return this.cache.accountIds.data.get(account) ?? null;
   }
   /**
-   * Opt-in fast path for one account's header search: answer from Mail's Envelope Index instead of an AppleScript
+   * Opt-in fast path for one account's header search (and, with the body index,
+   * body search): answer from Mail's Envelope Index instead of an AppleScript
    * scan. Returns null whenever the index can't answer completely, so the caller
    * falls back to AppleScript rather than reporting a false empty.
    */
@@ -101805,14 +102687,34 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
     if (filters.flagColorIndex !== void 0) return fallback("flagColor filter");
     const accountId = this.getAccountId(account);
     if (!accountId) return fallback("account id unavailable");
-    const outcome = searchEnvelopeIndex({ accountId, ...filters });
-    if (!outcome.ok) return fallback(outcome.reason);
+    const scope = `${account} / ${filters.mailbox || "*"}`;
+    const notSearched = (reason) => ({
+      messages: [],
+      diagnostics: {
+        partial: true,
+        timedOutAccounts: [],
+        skippedLargeMailboxes: [],
+        notSearchedMailboxes: [`${scope} (body search unavailable: ${reason})`]
+      }
+    });
+    let body;
+    if (filters.body !== void 0) {
+      const ready = prepareBodySearch();
+      if (!ready.ok) return notSearched(ready.reason);
+      body = { text: filters.body, indexFile: ready.file };
+    }
+    const outcome = searchEnvelopeIndex({ accountId, ...filters, body });
+    if (!outcome.ok) return body ? notSearched(outcome.reason) : fallback(outcome.reason);
     const diagnostics = {
       partial: false,
       timedOutAccounts: [],
       skippedLargeMailboxes: [],
       notSearchedMailboxes: []
     };
+    if (outcome.bodyCoverage && !isScopeComplete(outcome.bodyCoverage)) {
+      diagnostics.partial = true;
+      diagnostics.notSearchedMailboxes.push(`${scope} (${describeScopeGap(outcome.bodyCoverage)})`);
+    }
     const messages = outcome.rows.map((r) => ({
       id: String(r.id),
       subject: r.subject,
@@ -102085,7 +102987,7 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
    *     `partial` result with the affected scopes named, instead of an empty
    *     "success."
    */
-  searchMessagesWithDiagnostics(query, mailbox, account, limit = 50, dateFrom, dateTo, from, subject, isRead, isFlagged, flagColorIndex) {
+  searchMessagesWithDiagnostics(query, mailbox, account, limit = 50, dateFrom, dateTo, from, subject, isRead, isFlagged, flagColorIndex, body) {
     if (!account) {
       const { accounts, failed, error: error63 } = this.listAccountsChecked();
       const allMessages = [];
@@ -102111,7 +103013,8 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
             subject,
             isRead,
             isFlagged,
-            flagColorIndex
+            flagColorIndex,
+            body
           );
           allMessages.push(...res.messages);
           mergeSearchDiagnostics(diagnostics, res.diagnostics);
@@ -102136,9 +103039,23 @@ ${indent}end try${this.sanitizeFragment("_uacct", indent)}${this.sanitizeFragmen
         subject,
         isRead,
         isFlagged,
-        flagColorIndex
+        flagColorIndex,
+        body
       });
       if (fast) return tagBackend(fast, targetAccount, "envelope-index");
+    }
+    if (body !== void 0) {
+      return {
+        messages: [],
+        diagnostics: {
+          partial: true,
+          timedOutAccounts: [],
+          skippedLargeMailboxes: [],
+          notSearchedMailboxes: [
+            `${targetAccount} (body search requires the IMAP backend or the body index)`
+          ]
+        }
+      };
     }
     const mbIter = local ? "_mbs" : "mailboxes";
     const searchCondition = buildSearchCondition({
@@ -104453,12 +105370,12 @@ ${this.errorEmit("              ")}
     const safeName = escapeForAppleScript(attachmentName);
     let temporaryDirectory;
     try {
-      temporaryDirectory = mkdtempSync2(join8(target.saveDirectory, ".apple-mail-mcp-"));
+      temporaryDirectory = mkdtempSync2(join10(target.saveDirectory, ".apple-mail-mcp-"));
     } catch (error63) {
       console.error(`Failed to create attachment staging directory: ${error63}`);
       return false;
     }
-    const temporaryPath = join8(temporaryDirectory, "attachment");
+    const temporaryPath = join10(temporaryDirectory, "attachment");
     const safeTemporaryPath = escapeForAppleScript(temporaryPath);
     const cleanupTemporaryDirectory = () => {
       try {
@@ -104519,7 +105436,7 @@ ${this.errorEmit("              ")}
     if (result.success && result.output === "ok") {
       try {
         copyFileSync(temporaryPath, target.savedPath, fsConstants.COPYFILE_EXCL);
-        chmodSync(target.savedPath, 384);
+        chmodSync2(target.savedPath, 384);
         cleanupTemporaryDirectory();
         return true;
       } catch (err) {
@@ -104541,11 +105458,11 @@ ${this.errorEmit("              ")}
     }
     let mimeTemporaryDirectory;
     try {
-      mimeTemporaryDirectory = mkdtempSync2(join8(target.saveDirectory, ".apple-mail-mcp-"));
-      const mimeTemporaryPath = join8(mimeTemporaryDirectory, "attachment");
+      mimeTemporaryDirectory = mkdtempSync2(join10(target.saveDirectory, ".apple-mail-mcp-"));
+      const mimeTemporaryPath = join10(mimeTemporaryDirectory, "attachment");
       writeFileSync4(mimeTemporaryPath, attachment.data, { flag: "wx", mode: 384 });
       copyFileSync(mimeTemporaryPath, target.savedPath, fsConstants.COPYFILE_EXCL);
-      chmodSync(target.savedPath, 384);
+      chmodSync2(target.savedPath, 384);
       return true;
     } catch (err) {
       console.error(`Failed to write attachment to disk: ${err}`);
@@ -104568,7 +105485,7 @@ ${this.errorEmit("              ")}
     let dir = null;
     try {
       dir = mkdtempSync2("/private/tmp/amcp-fetch-");
-      const dest = join8(dir, attachmentName.replace(/[/\\]/g, "_"));
+      const dest = join10(dir, attachmentName.replace(/[/\\]/g, "_"));
       const ok = this.saveAttachment(id, attachmentName, dir);
       if (!ok) {
         return {
@@ -104820,13 +105737,13 @@ ${this.errorEmit("              ")}
   // gives full control over criteria without UI/GUI scripting.
   // ===========================================================================
   findSyncedSmartPlist() {
-    const base2 = join8(homedir6(), "Library", "Mail");
+    const base2 = join10(homedir7(), "Library", "Mail");
     try {
-      const versions = readdirSync4(base2).filter((d) => d.startsWith("V"));
+      const versions = readdirSync5(base2).filter((d) => d.startsWith("V"));
       versions.sort().reverse();
       for (const v of versions) {
-        const p = join8(base2, v, "MailData", "SyncedSmartMailboxes.plist");
-        if (existsSync5(p)) return p;
+        const p = join10(base2, v, "MailData", "SyncedSmartMailboxes.plist");
+        if (existsSync6(p)) return p;
       }
     } catch {
     }
@@ -104844,7 +105761,7 @@ ${this.errorEmit("              ")}
    * existing smart mailbox on the next save.)
    */
   readSmartMailboxEntries(plistPath) {
-    if (!plistPath || !existsSync5(plistPath)) return [];
+    if (!plistPath || !existsSync6(plistPath)) return [];
     const j = spawnSync4("plutil", ["-convert", "json", "-o", "-", plistPath], {
       encoding: "utf8"
     });
@@ -104913,7 +105830,7 @@ ${this.errorEmit("              ")}
     const lint = spawnSync4("plutil", ["-lint", temp], { encoding: "utf8" });
     if (lint.status !== 0) {
       try {
-        unlinkSync2(temp);
+        unlinkSync3(temp);
       } catch {
       }
       return false;
@@ -105011,7 +105928,7 @@ ${this.errorEmit("              ")}
     const cleanupEntryFiles = () => {
       for (const f of [entryJson, entryPlist]) {
         try {
-          unlinkSync2(f);
+          unlinkSync3(f);
         } catch {
         }
       }
@@ -105023,7 +105940,7 @@ ${this.errorEmit("              ")}
     if (conv.status !== 0) {
       cleanupEntryFiles();
       try {
-        unlinkSync2(temp);
+        unlinkSync3(temp);
       } catch {
       }
       return {
@@ -105038,7 +105955,7 @@ ${this.errorEmit("              ")}
     cleanupEntryFiles();
     if (ins.status !== 0) {
       try {
-        unlinkSync2(temp);
+        unlinkSync3(temp);
       } catch {
       }
       return {
@@ -105081,7 +105998,7 @@ ${this.errorEmit("              ")}
     });
     if (del.status !== 0) {
       try {
-        unlinkSync2(temp);
+        unlinkSync3(temp);
       } catch {
       }
       return { deleted: false, error: (del.stderr || "PlistBuddy delete failed").trim() };
@@ -106876,8 +107793,51 @@ async function runDoctor(mailManager2) {
     status: isSmtpConfigured() ? "ok" : "warn",
     detail: isSmtpConfigured() ? `configuration present (${smtpHost}); SMTP authentication and delivery have not been checked. send-email auto-prefers SMTP unless a non-email "account" label selects AppleScript. SMTP sends attempt a best-effort Sent-folder copy through matching-account IMAP; check the send result for whether it was filed. Pass transport:"applescript" to force Mail.app. The apple-mail-send CLI is also available.` : `not configured \u2014 send-email uses AppleScript (subject to macOS 15+ blockquote wrapping). Set ${SMTP_ENV.host} and ${SMTP_ENV.user} (+ password via Keychain) to enable. ${CONFIG_FILE_HINT}. Setup guide: ${SETUP_GUIDE_URL}`
   });
+  const body = bodyIndexCheck(bodyIndexStatus());
+  if (body) checks.push(body);
   const healthy = !checks.some((c) => c.status === "fail");
   return { healthy, checks };
+}
+function bodyIndexCheck(s, env = process.env) {
+  if (!s.enabled) {
+    if (!isTruthyFlag(env[BODY_INDEX_ENV])) return null;
+    return {
+      name: "Body index",
+      status: "warn",
+      detail: `${BODY_INDEX_ENV} is set but ${ENVELOPE_INDEX_ENV} is not; the body index needs both, so body search on AppleScript-only accounts is off.`
+    };
+  }
+  const fmt = (n) => n.toLocaleString("en-US");
+  const parts = [];
+  if (s.path) parts.push(`file ${s.path}`);
+  if (s.role) {
+    parts.push(
+      s.role === "writer" ? `this instance is the writer (${s.watching ? "watching the mail store" : "no file watcher; timed walks only"})` : "this instance is a reader (another instance keeps the index current)"
+    );
+  }
+  if (s.counts) {
+    const c = s.counts;
+    parts.push(
+      `${fmt(c.indexed + c.partial)} messages indexed` + (c.queued ? `, ${fmt(c.queued)} not indexed yet` : "") + (c.partial ? `, ${fmt(c.partial)} with no body downloaded yet` : "") + (c.tooLarge ? `, ${fmt(c.tooLarge)} over the 25 MB cap` : "")
+    );
+  }
+  if (s.meta) {
+    const m = s.meta;
+    parts.push(
+      m.lastFullWalk ? `last full walk ${m.lastFullWalk} (${fmt(m.lastWalkFiles ?? 0)} files, ${fmt(m.lastWalkMs ?? 0)} ms)` : "first full walk still running"
+    );
+    if (m.lastRebuild) parts.push(`rebuilt ${m.lastRebuild}`);
+  }
+  const lastError2 = s.lastError ?? s.meta?.lastError;
+  if (lastError2) parts.push(`last error: ${lastError2}`);
+  if (s.unavailable) {
+    return {
+      name: "Body index",
+      status: "warn",
+      detail: `enabled but not usable: ${s.unavailable}. Body searches on AppleScript-only accounts report those accounts as not searched.${parts.length ? ` ${parts.join("; ")}.` : ""}`
+    };
+  }
+  return { name: "Body index", status: "ok", detail: `${parts.join("; ")}.` };
 }
 function formatDoctorReport(r) {
   const icon = (s) => s === "ok" ? "\u2705" : s === "warn" ? "\u26A0\uFE0F " : "\u274C";
@@ -107183,18 +108143,18 @@ var ImapIdleWatcher = class {
 };
 
 // src/services/fileConfig.ts
-import { existsSync as existsSync6, readFileSync as readFileSync5 } from "fs";
-import { join as join9 } from "path";
-import { homedir as homedir7 } from "os";
+import { existsSync as existsSync7, readFileSync as readFileSync5 } from "fs";
+import { join as join11 } from "path";
+import { homedir as homedir8 } from "os";
 function fileConfigPath(env = process.env) {
   const override = env.APPLE_MAIL_MCP_CONFIG_FILE;
   if (override && override.trim()) return override.trim();
-  return join9(homedir7(), "Library", "Application Support", "apple-mail-mcp", "config.json");
+  return join11(homedir8(), "Library", "Application Support", "apple-mail-mcp", "config.json");
 }
 function loadFileConfig(env = process.env, path3 = fileConfigPath(env)) {
   const applied = [];
   try {
-    if (!existsSync6(path3)) return applied;
+    if (!existsSync7(path3)) return applied;
     const parsed = JSON.parse(readFileSync5(path3, "utf8"));
     if (!parsed || typeof parsed !== "object") return applied;
     for (const [k, v] of Object.entries(parsed)) {
@@ -107536,7 +108496,7 @@ registerTool(
     inputSchema: {
       query: external_exports.string().optional().describe("Text to search for in subject or sender"),
       body: external_exports.string().optional().describe(
-        "Text to search for in the message body (server-side IMAP BODY search). Requires the IMAP backend for the account searched; AppleScript-only accounts cannot search bodies and are reported as not searched."
+        "Text to search for in the message body (server-side IMAP BODY search). Requires the IMAP backend for the account searched, or the opt-in local body index (APPLE_MAIL_MCP_BODY_INDEX); otherwise AppleScript-only accounts cannot search bodies and are reported as not searched."
       ),
       from: external_exports.string().optional().describe(
         "Filter by sender (substring match against the full sender string, i.e. display name + address \u2014 not an exact address match)"
@@ -107625,7 +108585,7 @@ registerTool(
           );
         }
         const fan = await fanOutImapMessages(imapArgs, "search", { signal });
-        if (body) {
+        if (body && !isBodyIndexEnabled()) {
           const apple2 = {
             rows: [],
             diagnostics: {
@@ -107669,7 +108629,8 @@ registerTool(
               subject,
               isRead,
               isFlagged,
-              flagColorIndex
+              flagColorIndex,
+              body
             )
           ),
           listFailure
@@ -107682,9 +108643,9 @@ registerTool(
             `offset is supported only on IMAP accounts; IMAP is not configured for ${account ? `account "${account}"` : "any account"}. Omit offset, or narrow the search with dateFrom/dateTo instead.`
           );
         }
-        if (body) {
+        if (body && !isBodyIndexEnabled()) {
           return errorResponse(
-            `Body search requires the IMAP backend, which is not configured for ${account ? `account "${account}"` : "any account"}. Configure IMAP (see the IMAP backend section of the README) or search by query/subject/from instead.`
+            `Body search requires the IMAP backend (or the opt-in body index), which is not configured for ${account ? `account "${account}"` : "any account"}. Configure IMAP (see the IMAP backend section of the README) or search by query/subject/from instead.`
           );
         }
         const { messages, diagnostics } = mailManager.searchMessagesWithDiagnostics(
@@ -107698,7 +108659,8 @@ registerTool(
           subject,
           isRead,
           isFlagged,
-          flagColorIndex
+          flagColorIndex,
+          body
         );
         const coverageBlock = partialCoverageBlock(diagnostics);
         const backendInfo = searchBackendInfo(diagnostics);
@@ -110050,6 +111012,7 @@ process.on("unhandledRejection", (reason) => {
 });
 var transport = withJsonSchema2020_12(new StdioServerTransport());
 await server.connect(transport);
+if (isBodyIndexEnabled()) startBackgroundIndexing();
 var idleWatcher;
 if (/^(1|true|yes|on)$/i.test(process.env.APPLE_MAIL_MCP_IMAP_IDLE?.trim() ?? "")) {
   try {
@@ -110080,6 +111043,7 @@ var shutdown = () => {
   clearInterval(orphanWatchdog);
   const force = setTimeout(() => process.exit(0), 2e3);
   force.unref?.();
+  stopBodyIndexing();
   void Promise.allSettled([idleWatcher?.stop() ?? Promise.resolve(), dropAllPools()]).finally(
     () => process.exit(0)
   );
