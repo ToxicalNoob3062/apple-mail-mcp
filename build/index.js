@@ -9857,7 +9857,7 @@ var require_transport = __commonJS({
     var { existsSync: existsSync8 } = __require("node:fs");
     var getCallers = require_caller();
     var { join: join12, isAbsolute: isAbsolute2, sep: sep3 } = __require("node:path");
-    var { fileURLToPath } = __require("node:url");
+    var { fileURLToPath: fileURLToPath2 } = __require("node:url");
     var sleep2 = require_atomic_sleep();
     var onExit = require_on_exit_leak_free();
     var ThreadStream = require_thread_stream();
@@ -9923,7 +9923,7 @@ var require_transport = __commonJS({
       let path3 = unquoted;
       if (path3.startsWith("file://")) {
         try {
-          path3 = fileURLToPath(path3);
+          path3 = fileURLToPath2(path3);
         } catch {
           return false;
         }
@@ -98736,7 +98736,7 @@ import {
   existsSync as existsSync6,
   writeFileSync as writeFileSync4,
   readFileSync as readFileSync4,
-  readdirSync as readdirSync5,
+  readdirSync as readdirSync6,
   unlinkSync as unlinkSync3,
   copyFileSync,
   renameSync as renameSync2,
@@ -100128,7 +100128,13 @@ var StoreWalk = class {
       let entries;
       try {
         entries = readdirSync3(dir, { withFileTypes: true });
-      } catch {
+      } catch (err) {
+        if (dir === this.versionDir) {
+          this.stack.push(dir);
+          throw new Error(
+            `can't list the Mail store (${err.code ?? String(err)})`
+          );
+        }
         continue;
       }
       const names = new Set(entries.map((e) => e.name));
@@ -100158,6 +100164,7 @@ var StoreWalk = class {
     return this.seen.has(id);
   }
 };
+var WRITER_BUSY_TIMEOUT_MS = 5e3;
 var BodyIndexWriter = class _BodyIndexWriter {
   constructor(versionDir, path3, db, rebuilt, clock2) {
     this.versionDir = versionDir;
@@ -100171,7 +100178,6 @@ var BodyIndexWriter = class _BodyIndexWriter {
   clock;
   db;
   walk = null;
-  lastWalkDone = 0;
   /** Set when this open rebuilt the file; surfaced once in diagnostics. */
   rebuilt;
   /**
@@ -100193,7 +100199,7 @@ var BodyIndexWriter = class _BodyIndexWriter {
       ensurePrivateFile(path3);
       const db2 = new sqlite.DatabaseSync(path3);
       try {
-        db2.exec(`PRAGMA busy_timeout = 5000`);
+        db2.exec(`PRAGMA busy_timeout = ${WRITER_BUSY_TIMEOUT_MS}`);
         db2.prepare(`SELECT count(*) FROM sqlite_master`).get();
         return db2;
       } catch (err) {
@@ -100246,6 +100252,34 @@ var BodyIndexWriter = class _BodyIndexWriter {
       };
     }
   }
+  /**
+   * Open the index the server already opened with {@link open}, for the build
+   * loop. Only through SQLite: no header read, no `0600` touch, no create and
+   * no rebuild — any of those is a plain `open`/`close` of the database file,
+   * which, when the loop runs in the server's own process, would drop the
+   * server's locks on it (POSIX locks belong to the process). Refuses a
+   * missing file or one that isn't ours and current, rather than repairing
+   * it: that is the server's job.
+   */
+  static openExisting(versionDir, path3, sqlite, clock2 = realClock) {
+    if (!existsSync4(path3)) return { reason: `body index ${path3} does not exist` };
+    let db = null;
+    try {
+      db = new sqlite.DatabaseSync(path3);
+      db.exec(`PRAGMA busy_timeout = ${WRITER_BUSY_TIMEOUT_MS}`);
+      const mismatch = stampMismatch(db);
+      if (mismatch) throw new Error(mismatch);
+      return new _BodyIndexWriter(versionDir, path3, db, null, clock2);
+    } catch (err) {
+      try {
+        db?.close();
+      } catch {
+      }
+      return {
+        reason: `body index could not be opened: ${err instanceof Error ? err.message : String(err)}`
+      };
+    }
+  }
   setMeta(key, value) {
     this.db.prepare(
       `INSERT INTO meta (key, value) VALUES (?, ?)
@@ -100255,10 +100289,6 @@ var BodyIndexWriter = class _BodyIndexWriter {
   /** Whether a full walk is running. */
   get walking() {
     return this.walk !== null;
-  }
-  /** Whether a full walk is due (`intervalMs` since the last one finished, or never ran). */
-  walkDue(intervalMs) {
-    return this.walk === null && (this.lastWalkDone === 0 || this.clock.now() - this.lastWalkDone >= intervalMs);
   }
   /** Start a full walk now (no-op while one is running). */
   startWalk() {
@@ -100279,7 +100309,7 @@ var BodyIndexWriter = class _BodyIndexWriter {
          size = excluded.size, state = ${DocState.queued}`
     );
     let finished3;
-    this.db.exec("BEGIN");
+    this.db.exec("BEGIN IMMEDIATE");
     try {
       finished3 = walk.step(t0 + budgetMs, this.clock, (id, path3, mtime, size) => {
         const known = get.get(id);
@@ -100296,8 +100326,7 @@ var BodyIndexWriter = class _BodyIndexWriter {
     walk.workMs += this.clock.monotonic() - t0;
     if (finished3) {
       this.walk = null;
-      this.lastWalkDone = this.clock.now();
-      this.setMeta("lastFullWalk", new Date(this.lastWalkDone).toISOString());
+      this.setMeta("lastFullWalk", new Date(this.clock.now()).toISOString());
       this.setMeta("lastWalkMs", Math.round(walk.workMs));
       this.setMeta("lastWalkFiles", walk.files);
     }
@@ -100339,7 +100368,9 @@ var BodyIndexWriter = class _BodyIndexWriter {
   /**
    * Index queued messages, newest id first, until `budgetMs` has passed.
    * Returns how many were processed. A file that can't be read or carries no
-   * text is still marked done, so it isn't retried on every step.
+   * text is still marked done, so it isn't retried on every step. Each batch
+   * is picked inside its own write transaction, so two connections indexing
+   * at once never parse the same message twice.
    */
   indexStep(budgetMs) {
     const deadline = this.clock.monotonic() + budgetMs;
@@ -100350,11 +100381,12 @@ var BodyIndexWriter = class _BodyIndexWriter {
     const delBody = this.deleteBodyStatement();
     const addBody = this.prep(`INSERT INTO bodies (rowid, body) VALUES (?, ?)`);
     let done = 0;
-    while (this.clock.monotonic() < deadline) {
-      const batch = next.all();
-      if (batch.length === 0) break;
-      this.db.exec("BEGIN");
+    let more = true;
+    while (more && this.clock.monotonic() < deadline) {
+      this.db.exec("BEGIN IMMEDIATE");
       try {
+        const batch = next.all();
+        more = batch.length > 0;
         for (const r of batch) {
           if (done > 0 && this.clock.monotonic() >= deadline) break;
           const id = Number(r.id);
@@ -100396,7 +100428,7 @@ var BodyIndexWriter = class _BodyIndexWriter {
     );
     const delDoc = this.prep(`DELETE FROM docs WHERE id = ?`);
     const delBody = this.deleteBodyStatement();
-    this.db.exec("BEGIN");
+    this.db.exec("BEGIN IMMEDIATE");
     try {
       for (const path3 of paths) {
         const name2 = basename(path3);
@@ -100823,6 +100855,145 @@ function readMessageFromStore(id, opts = {}) {
 // src/utils/bodyIndexSync.ts
 import { watch as fsWatch } from "fs";
 import { dirname as dirname4, join as join9 } from "path";
+import { fork } from "child_process";
+import { fileURLToPath } from "url";
+
+// src/utils/bodyIndexBuild.ts
+import { readdirSync as readdirSync5 } from "fs";
+
+// src/utils/orphan.ts
+function isOrphaned(ppid = process.ppid) {
+  return ppid === 1;
+}
+
+// src/utils/bodyIndexBuild.ts
+var BODY_INDEX_BUILDER_ARG = "--body-index-builder";
+var ORPHAN_CHECK_MS = 2e3;
+function errText3(err) {
+  return err instanceof Error ? err.message : String(err);
+}
+function runBuilder(port, init, deps) {
+  const opened = deps.sqlite ? BodyIndexWriter.openExisting(init.versionDir, init.indexPath, deps.sqlite, deps.clock) : { reason: "node:sqlite unavailable in the build process" };
+  if ("reason" in opened) {
+    port.postMessage({ type: "failed", where: "open", message: opened.reason });
+    return { stop() {
+    } };
+  }
+  const w = opened;
+  try {
+    readdirSync5(init.versionDir);
+  } catch (err) {
+    w.close();
+    port.postMessage({
+      type: "failed",
+      where: "store",
+      message: `can't read the Mail store (${err.code ?? errText3(err)})`
+    });
+    return { stop() {
+    } };
+  }
+  let seq = 0;
+  let timer = null;
+  let stopped = false;
+  const halt = () => {
+    stopped = true;
+    if (timer) clearTimeout(timer);
+    timer = null;
+  };
+  const fail = (err) => {
+    halt();
+    const message = errText3(err);
+    try {
+      w.setMeta("lastError", `${new Date(deps.clock.now()).toISOString()} index build: ${message}`);
+    } catch {
+    }
+    port.postMessage({ type: "failed", where: "step", message });
+  };
+  const schedule = (delay) => {
+    timer = setTimeout(step, delay);
+    timer.unref?.();
+  };
+  function step() {
+    timer = null;
+    try {
+      if (w.walking) {
+        if (w.walkStep(init.sliceMs)) port.postMessage({ type: "walked" });
+        schedule(init.pauseMs);
+        return;
+      }
+      if (w.hasQueued()) {
+        w.indexStep(init.sliceMs);
+        schedule(init.pauseMs);
+        return;
+      }
+    } catch (err) {
+      fail(err);
+      return;
+    }
+    port.postMessage({ type: "idle", seq });
+  }
+  port.on("message", (msg) => {
+    if (stopped) return;
+    seq = msg.seq;
+    try {
+      if (msg.walk) w.startWalk();
+      else if (msg.paths.length > 0) w.applyChanges(msg.paths);
+    } catch (err) {
+      fail(err);
+      return;
+    }
+    if (!timer) schedule(0);
+  });
+  port.postMessage({ type: "ready", pid: process.pid });
+  return {
+    stop() {
+      halt();
+      w.close();
+    }
+  };
+}
+function runBuilderProcess(proc, deps) {
+  let loop = null;
+  let listener = null;
+  let done = false;
+  const quit = () => {
+    if (done) return;
+    done = true;
+    clearInterval(orphanCheck);
+    loop?.stop();
+    proc.exit(0);
+  };
+  const orphanCheck = setInterval(() => {
+    if (isOrphaned(proc.ppid())) quit();
+  }, deps.orphanCheckMs ?? ORPHAN_CHECK_MS);
+  orphanCheck.unref?.();
+  proc.onDisconnect(quit);
+  proc.onMessage((msg) => {
+    if (done) return;
+    if (msg.type === "start") {
+      loop ??= runBuilder(
+        {
+          postMessage: (m) => {
+            try {
+              proc.send(m);
+            } catch {
+              quit();
+            }
+          },
+          on: (_event, fn) => {
+            listener = fn;
+          }
+        },
+        msg.init,
+        deps
+      );
+      return;
+    }
+    listener?.(msg);
+  });
+}
+
+// src/utils/bodyIndexSync.ts
 var BODY_INDEX_ENV = "APPLE_MAIL_MCP_BODY_INDEX";
 var RESCAN_WATCHED_MS = 10 * 6e4;
 var RESCAN_UNWATCHED_MS = 5 * 6e4;
@@ -100831,6 +101002,7 @@ var WRITER_RETRY_MS = 3e4;
 var SLICE_MS = 50;
 var PAUSE_MS = 100;
 var SEARCH_CATCHUP_MS = 50;
+var BUILD_RESTART_MS = 5e3;
 function isBodyIndexEnabled(env = process.env) {
   return isTruthyFlag(env[BODY_INDEX_ENV]) && isEnvelopeIndexEnabled(env);
 }
@@ -100843,9 +101015,101 @@ var fsEventsWatch = (dir, onEvent, onError) => {
   w.on("error", onError);
   return w;
 };
+var STOP_GRACE_MS = 2e3;
+function builderExecArgv(execArgv = process.execArgv, nodeOptions = process.env.NODE_OPTIONS) {
+  const flag = "--experimental-sqlite";
+  return execArgv.includes(flag) || (nodeOptions ?? "").split(/\s+/).includes(flag) ? [flag] : [];
+}
+function childProcessRunner(entry, opts = {}) {
+  return {
+    runsOn: "child process",
+    start(init, events) {
+      const child = fork(entry, [BODY_INDEX_BUILDER_ARG], {
+        execPath: opts.execPath ?? process.execPath,
+        execArgv: builderExecArgv(),
+        env: {},
+        stdio: ["ignore", "ignore", "inherit", "ipc"]
+      });
+      child.unref();
+      child.channel?.unref();
+      let stopped = false;
+      let error63 = null;
+      const exited = new Promise((resolve5) => child.once("exit", () => resolve5()));
+      child.on("message", (msg) => {
+        if (!stopped) events.report(msg);
+      });
+      child.on("error", (err) => {
+        error63 = err;
+        if (child.pid === void 0 && !stopped) {
+          stopped = true;
+          events.exit(errText4(err));
+        }
+      });
+      child.on("exit", (code, signal) => {
+        if (stopped) return;
+        stopped = true;
+        events.exit(
+          error63 !== null ? errText4(error63) : signal ? `killed by ${signal}` : `exit code ${code}`
+        );
+      });
+      const send = (msg) => {
+        if (child.connected) child.send(msg, () => {
+        });
+      };
+      send({ type: "start", init });
+      return {
+        post: (work) => send(work),
+        stop: async () => {
+          if (child.pid === void 0 || child.exitCode !== null || child.signalCode !== null) {
+            stopped = true;
+            return;
+          }
+          stopped = true;
+          if (child.connected) child.disconnect();
+          const kill = setTimeout(() => child.kill("SIGKILL"), STOP_GRACE_MS);
+          kill.unref?.();
+          await exited;
+          clearTimeout(kill);
+        }
+      };
+    }
+  };
+}
+var mainThreadRunner = {
+  runsOn: "main thread",
+  start(init, events) {
+    let stopped = false;
+    let listener = null;
+    const later = (fn) => {
+      const t = setTimeout(() => {
+        if (!stopped) fn();
+      }, 0);
+      t.unref?.();
+    };
+    const loop = runBuilder(
+      {
+        postMessage: (msg) => later(() => events.report(msg)),
+        on: (_event, fn) => {
+          listener = fn;
+        }
+      },
+      init,
+      { sqlite: sqliteModule(), clock }
+    );
+    return {
+      post: (work) => later(() => listener?.(work)),
+      stop: async () => {
+        stopped = true;
+        loop.stop();
+      }
+    };
+  }
+};
 var watchImpl = fsEventsWatch;
 var clock = realClock;
 var sqliteOverride;
+var childRunner = childProcessRunner(fileURLToPath(import.meta.url));
+var runner = childRunner;
 var writer = null;
 var writerLock = null;
 var watcher = null;
@@ -100855,15 +101119,23 @@ var running = false;
 var changedPaths = /* @__PURE__ */ new Set();
 var walkRequested = false;
 var lastError = null;
+var build = null;
+var buildReady = false;
+var buildSeq = 0;
+var buildFailures = 0;
+var buildFallback = null;
+var buildStopped = Promise.resolve();
+var lastWalkDone = 0;
+var walkInFlight = false;
 function sqliteModule() {
   return sqliteOverride === void 0 ? loadSqlite2() : sqliteOverride;
 }
-function errText3(err) {
+function errText4(err) {
   return err instanceof Error ? err.message : String(err);
 }
 function noteError(where, err) {
-  lastError = `${new Date(clock.now()).toISOString()} ${where}: ${errText3(err)}`;
-  console.error(`[bodyIndex] ${where}: ${errText3(err)}`);
+  lastError = `${new Date(clock.now()).toISOString()} ${where}: ${errText4(err)}`;
+  console.error(`[bodyIndex] ${where}: ${errText4(err)}`);
   try {
     writer?.setMeta("lastError", lastError);
   } catch {
@@ -100975,25 +101247,126 @@ function scheduleBatch() {
   }, WATCH_DEBOUNCE_MS);
   debounceTimer.unref?.();
 }
-function flushChanges(w) {
+function takeChanges() {
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = null;
-  if (walkRequested) {
-    walkRequested = false;
-    changedPaths.clear();
-    w.startWalk();
+  const walk = walkRequested;
+  walkRequested = false;
+  const paths = walk ? [] : [...changedPaths];
+  changedPaths.clear();
+  return { walk, paths };
+}
+function rescanInterval() {
+  return watcher ? RESCAN_WATCHED_MS : RESCAN_UNWATCHED_MS;
+}
+function walkDue() {
+  return !walkInFlight && (lastWalkDone === 0 || clock.now() - lastWalkDone >= rescanInterval());
+}
+function handToBuild(w, walk, paths) {
+  const b = build ?? startBuild(w);
+  if (walk) walkInFlight = true;
+  b.post({ type: "work", seq: ++buildSeq, walk, paths });
+}
+function startBuild(w) {
+  const init = {
+    versionDir: w.versionDir,
+    indexPath: w.path,
+    sliceMs: SLICE_MS,
+    pauseMs: PAUSE_MS
+  };
+  let handle = null;
+  const events = {
+    report: (msg) => {
+      if (handle !== null && handle === build) onBuildReport(msg);
+    },
+    exit: (why) => {
+      if (handle !== null && handle === build) onBuildExit(why);
+    }
+  };
+  try {
+    handle = (buildFallback ? mainThreadRunner : runner).start(init, events);
+  } catch (err) {
+    fallBackToMainThread(`build process could not start (${errText4(err)})`);
+    handle = mainThreadRunner.start(init, events);
+  }
+  build = handle;
+  buildReady = false;
+  return handle;
+}
+function stopBuild() {
+  const b = build;
+  build = null;
+  buildReady = false;
+  if (walkInFlight) walkRequested = true;
+  walkInFlight = false;
+  if (b) buildStopped = b.stop();
+}
+function onBuildReport(msg) {
+  switch (msg.type) {
+    case "ready":
+      buildReady = true;
+      return;
+    case "walked":
+      walkInFlight = false;
+      lastWalkDone = clock.now();
+      return;
+    case "idle":
+      if (msg.seq !== buildSeq) return;
+      buildFailures = 0;
+      stopBuild();
+      wake(0);
+      return;
+    case "failed":
+      if (msg.where === "store" && !buildFallback) {
+        stopBuild();
+        fallBackToMainThread(`the build process ${msg.message}`);
+        wake(0);
+        return;
+      }
+      buildFailed(
+        msg.where === "step" ? `index build failed: ${msg.message}` : `index build could not start: ${msg.message}`
+      );
+  }
+}
+function onBuildExit(why) {
+  const started = buildReady;
+  stopBuild();
+  if (!started && !buildFallback) {
+    fallBackToMainThread(`build process could not start (${why})`);
+    wake(0);
     return;
   }
-  if (changedPaths.size === 0) return;
-  const batch = [...changedPaths];
-  changedPaths.clear();
-  w.applyChanges(batch);
+  buildFailed(`build process stopped unexpectedly (${why})`);
+}
+function buildFailed(why) {
+  stopBuild();
+  noteError("index build", why);
+  buildFailures++;
+  wake(buildFailures === 1 ? BUILD_RESTART_MS : rescanInterval());
+}
+function fallBackToMainThread(why) {
+  buildFallback = `${why}; building on the main thread`;
+  noteError("index build", buildFallback);
 }
 function wake(delay) {
   if (!running) return;
   if (backgroundTimer) clearTimeout(backgroundTimer);
   backgroundTimer = setTimeout(tick, delay);
   backgroundTimer.unref?.();
+}
+function dispatch(w) {
+  const { walk: requested, paths } = takeChanges();
+  const walk = requested || walkDue();
+  if (build) {
+    if (walk || paths.length > 0) handToBuild(w, walk, paths);
+    return true;
+  }
+  if (!walk && paths.length > 0) w.applyChanges(paths);
+  if (walk || w.hasQueued()) {
+    handToBuild(w, walk, []);
+    return true;
+  }
+  return false;
 }
 function tick() {
   backgroundTimer = null;
@@ -101002,24 +101375,12 @@ function tick() {
     wake(WRITER_RETRY_MS);
     return;
   }
-  const interval = watcher ? RESCAN_WATCHED_MS : RESCAN_UNWATCHED_MS;
   try {
-    flushChanges(w);
-    if (w.walkDue(interval)) w.startWalk();
-    if (w.walking) {
-      w.walkStep(SLICE_MS);
-      wake(PAUSE_MS);
-      return;
-    }
-    if (w.hasQueued()) {
-      w.indexStep(SLICE_MS);
-      wake(PAUSE_MS);
-      return;
-    }
+    if (dispatch(w)) return;
   } catch (err) {
     noteError("indexing step failed", err);
   }
-  wake(interval);
+  wake(lastWalkDone === 0 ? rescanInterval() : lastWalkDone + rescanInterval() - clock.now());
 }
 function startBackgroundIndexing() {
   if (running) return;
@@ -101044,8 +101405,13 @@ function stopBodyIndexing() {
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = null;
   stopWatching();
+  stopBuild();
   changedPaths.clear();
   walkRequested = false;
+  walkInFlight = false;
+  buildSeq = 0;
+  buildFailures = 0;
+  lastWalkDone = 0;
   writer?.close();
   writer = null;
   releaseWriterLock();
@@ -101057,8 +101423,8 @@ function prepareBodySearch() {
   const w = claimWriter();
   if (w) {
     try {
-      flushChanges(w);
-      if (!w.walking && w.hasQueued()) w.indexStep(SEARCH_CATCHUP_MS);
+      if (!build) catchUp(w);
+      else dispatch(w);
     } catch (err) {
       noteError("search catch-up failed", err);
     }
@@ -101066,6 +101432,16 @@ function prepareBodySearch() {
     return { ok: false, reason: "body index not created yet" };
   }
   return { ok: true, file: path3 };
+}
+function catchUp(w) {
+  const { walk, paths } = takeChanges();
+  if (walk) {
+    walkRequested = true;
+  } else {
+    if (paths.length > 0) w.applyChanges(paths);
+    if (w.hasQueued()) w.indexStep(SEARCH_CATCHUP_MS);
+  }
+  if (walkRequested || w.hasQueued()) wake(0);
 }
 function bodyIndexStatus() {
   if (!isBodyIndexEnabled()) return { enabled: false };
@@ -101077,6 +101453,13 @@ function bodyIndexStatus() {
     path: path3,
     role: writer ? "writer" : "reader",
     watching: watcher !== null,
+    ...writer ? {
+      build: {
+        runsOn: buildFallback ? "main thread" : runner.runsOn,
+        running: build !== null,
+        ...buildFallback ? { fallback: buildFallback } : {}
+      }
+    } : {},
     ...lastError ? { lastError } : {}
   };
   try {
@@ -101095,7 +101478,7 @@ function bodyIndexStatus() {
       status.unavailable = "index file not created yet";
     }
   } catch (err) {
-    status.unavailable = `index unreadable: ${errText3(err)}`;
+    status.unavailable = `index unreadable: ${errText4(err)}`;
   }
   return status;
 }
@@ -105739,7 +106122,7 @@ ${this.errorEmit("              ")}
   findSyncedSmartPlist() {
     const base2 = join10(homedir7(), "Library", "Mail");
     try {
-      const versions = readdirSync5(base2).filter((d) => d.startsWith("V"));
+      const versions = readdirSync6(base2).filter((d) => d.startsWith("V"));
       versions.sort().reverse();
       for (const v of versions) {
         const p = join10(base2, v, "MailData", "SyncedSmartMailboxes.plist");
@@ -107815,6 +108198,12 @@ function bodyIndexCheck(s, env = process.env) {
       s.role === "writer" ? `this instance is the writer (${s.watching ? "watching the mail store" : "no file watcher; timed walks only"})` : "this instance is a reader (another instance keeps the index current)"
     );
   }
+  if (s.build) {
+    const b = s.build;
+    parts.push(
+      b.fallback ? `${b.fallback}${b.running ? "; build running" : ""}` : b.running ? `build running in a ${b.runsOn}` : `no build running (it starts in a ${b.runsOn} when there is work)`
+    );
+  }
   if (s.counts) {
     const c = s.counts;
     parts.push(
@@ -108170,11 +108559,6 @@ function loadFileConfig(env = process.env, path3 = fileConfigPath(env)) {
   return applied;
 }
 
-// src/utils/orphan.ts
-function isOrphaned(ppid = process.ppid) {
-  return ppid === 1;
-}
-
 // src/utils/jsonSchemaDialect.ts
 var JSON_SCHEMA_2020_12 = "https://json-schema.org/draft/2020-12/schema";
 var DEFINITIONS_REF_PREFIX = "#/definitions/";
@@ -108288,6 +108672,20 @@ function withJsonSchema2020_12(transport2) {
 
 // src/index.ts
 init_auditLog();
+if (process.argv.includes(BODY_INDEX_BUILDER_ARG) && process.send) {
+  runBuilderProcess(
+    {
+      send: (msg) => process.send(msg),
+      onMessage: (fn) => process.on("message", fn),
+      onDisconnect: (fn) => process.on("disconnect", fn),
+      ppid: () => process.ppid,
+      exit: (code) => process.exit(code)
+    },
+    { sqlite: loadSqlite2(), clock: realClock }
+  );
+  await new Promise(() => {
+  });
+}
 loadFileConfig();
 var BATCH_SOURCE_MAILBOX_SCHEMA = external_exports.string().optional().describe(
   "Mailbox the numeric ids were listed from (e.g. 'INBOX'). Must be paired with sourceAccount to form an unambiguous scope. Ignored for imap: ids."
