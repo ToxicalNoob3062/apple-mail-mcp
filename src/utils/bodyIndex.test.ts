@@ -279,6 +279,71 @@ describeIfSqlite("BodyIndexWriter: ownership and file modes", () => {
   });
 });
 
+describeIfSqlite("BodyIndexWriter.openExisting (the build process's open)", () => {
+  let root: string;
+  let store: string;
+  let path: string;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "bodyidx-existing-"));
+    store = join(root, "V10");
+    path = join(root, "support", "body.db");
+    writeEmlx(store, "ACC", "INBOX", 1, plainMessage("a", "harbour cruise"));
+  });
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it("opens the file the server created, as a second writer on the same index", () => {
+    const main = openWriter(store, path);
+    const second = BodyIndexWriter.openExisting(store, path, sqlite!);
+    if ("reason" in second) throw new Error(second.reason);
+    buildAll(second);
+    // The server's connection sees what the second one wrote.
+    expect(main.state().counts).toEqual({ indexed: 1, queued: 0, partial: 0, tooLarge: 0 });
+    expect(second.rebuilt).toBeNull();
+    second.close();
+    main.close();
+  });
+
+  it("keeps SQLite's temporary files in memory on both writer connections (no TMPDIR in the build process)", () => {
+    const main = openWriter(store, path);
+    const second = BodyIndexWriter.openExisting(store, path, sqlite!);
+    if ("reason" in second) throw new Error(second.reason);
+    try {
+      for (const db of [main.db, second.db]) {
+        expect(Number(db.prepare("PRAGMA temp_store").get()!.temp_store)).toBe(2);
+      }
+    } finally {
+      second.close();
+      main.close();
+    }
+  });
+
+  it("never creates a missing index (that is the server's job)", () => {
+    expect(BodyIndexWriter.openExisting(store, path, sqlite!)).toEqual({
+      reason: expect.stringContaining("does not exist"),
+    });
+    expect(existsSync(join(root, "support"))).toBe(false);
+  });
+
+  it("never rebuilds: a file that isn't ours or is out of date is refused as it is", () => {
+    openWriter(store, path).close();
+    const db = new sqlite!.DatabaseSync(path);
+    db.exec("PRAGMA user_version = 1");
+    db.close();
+    expect(BodyIndexWriter.openExisting(store, path, sqlite!)).toEqual({
+      reason: expect.stringContaining("being rebuilt"),
+    });
+    const check = new sqlite!.DatabaseSync(path, { readOnly: true });
+    expect(Number(check.prepare("PRAGMA user_version").get()!.user_version)).toBe(1);
+    check.close();
+    writeFileSync(path, "my notes, not a database");
+    expect(BodyIndexWriter.openExisting(store, path, sqlite!)).toEqual({
+      reason: expect.stringContaining("could not be opened"),
+    });
+    expect(readFileSync(path, "utf8")).toBe("my notes, not a database");
+  });
+});
+
 describeIfSqlite("BodyIndexWriter: walking and indexing", () => {
   let root: string;
   let store: string;
@@ -343,6 +408,20 @@ describeIfSqlite("BodyIndexWriter: walking and indexing", () => {
       }
     }
     expect(order).toEqual([3, 2, 1]);
+  });
+
+  it("a walk that can't list the store fails, instead of reading it as empty and dropping every row", () => {
+    buildAll(w);
+    expect(w.state().counts.indexed).toBe(3);
+    // What a process without Full Disk Access sees: the store's root can't be listed.
+    renameSync(store, `${store}.away`);
+    w.startWalk();
+    expect(() => w.walkStep(60_000)).toThrow(/can't list the Mail store \(ENOENT\)/);
+    expect(w.state().counts.indexed).toBe(3);
+    expect(bodies("wire transfer")).toEqual([3]);
+    renameSync(`${store}.away`, store);
+    expect(w.walkStep(60_000)).toBe(true); // the same walk resumes once it can read again
+    expect(w.state().counts.indexed).toBe(3);
   });
 
   it("stores no copy of the body text, only the search index", () => {
