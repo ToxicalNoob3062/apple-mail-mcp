@@ -27,6 +27,18 @@
  *    one above {@link MAX_EMLX_BYTES}.
  *  - **Bounded steps.** Walking the store and indexing both run in small
  *    time-boxed slices, so the caller can yield between them.
+ *  - **Two connections, one writer at a time.** The writer instance opens the
+ *    file twice: in the server ({@link BodyIndexWriter.open}) and in its build
+ *    process ({@link BodyIndexWriter.openExisting}). Every write transaction is
+ *    `BEGIN IMMEDIATE`, so it takes the write lock before it reads and waits
+ *    out the other connection under `busy_timeout`; a deferred `BEGIN` that
+ *    read first would fail with SQLITE_BUSY instead of waiting once the other
+ *    connection had committed. `openExisting` touches the file only through
+ *    SQLite: when the build falls back to the server's main thread, both
+ *    connections share one process, and a plain `open`/`close` of the database
+ *    file drops every POSIX lock the process holds on it.
+ *  - **An unreadable store is an error, not an empty one.** A walk that can't
+ *    list the store's root fails; it never finishes and drops every row.
  *  - **One bad message stops nothing.** A message file that can't be read or
  *    parsed is marked {@link DocState.unreadable} — counted as not searched,
  *    tried again on the next full walk — and indexing carries on past it.
@@ -515,8 +527,16 @@ class StoreWalk {
       let entries;
       try {
         entries = readdirSync(dir, { withFileTypes: true });
-      } catch {
-        continue;
+      } catch (err) {
+        // A store that can't be listed (Full Disk Access gone, store moved)
+        // must not read as an empty one: that would drop every indexed row.
+        if (dir === this.versionDir) {
+          this.stack.push(dir);
+          throw new Error(
+            `can't list the Mail store (${(err as NodeJS.ErrnoException).code ?? String(err)})`
+          );
+        }
+        continue; // a mailbox that vanished mid-walk
       }
       const names = new Set(entries.map((e) => e.name));
       const messages = inMessagesFolder(dir);
@@ -551,6 +571,18 @@ class StoreWalk {
   }
 }
 
+/** How long a writer connection waits for the other one's write transaction. */
+const WRITER_BUSY_TIMEOUT_MS = 5000;
+
+/**
+ * Settings for both writer connections: wait out the other one's write, and
+ * keep SQLite's temporary files in memory — the build process has no TMPDIR,
+ * so they would otherwise land in the shared /var/tmp, holding index pages.
+ */
+function writerPragmas(db: SqliteDatabase): void {
+  db.exec(`PRAGMA busy_timeout = ${WRITER_BUSY_TIMEOUT_MS}; PRAGMA temp_store = MEMORY`);
+}
+
 /** Whether a stored `docs` row is current for a file on disk (else it is queued again). */
 function rowIsCurrent(
   known: Record<string, unknown> | undefined,
@@ -575,7 +607,6 @@ function rowIsCurrent(
 export class BodyIndexWriter {
   readonly db: SqliteDatabase;
   private walk: StoreWalk | null = null;
-  private lastWalkDone = 0;
   /** Set when this open rebuilt the file; surfaced once in diagnostics. */
   readonly rebuilt: string | null;
 
@@ -614,9 +645,10 @@ export class BodyIndexWriter {
       ensurePrivateFile(path);
       const db = new sqlite.DatabaseSync(path);
       try {
-        // Readers search while the writer writes; wait for a lock briefly
-        // instead of failing on the moments they overlap.
-        db.exec(`PRAGMA busy_timeout = 5000`);
+        // Readers search while the writer writes, and the build process's
+        // connection writes too; wait for a lock briefly instead of failing on
+        // the moments they overlap.
+        writerPragmas(db);
         // Touches the header and schema, so a damaged file throws here.
         db.prepare(`SELECT count(*) FROM sqlite_master`).get();
         return db;
@@ -688,6 +720,42 @@ export class BodyIndexWriter {
     }
   }
 
+  /**
+   * Open the index the server already opened with {@link open}, for the build
+   * loop. Only through SQLite: no header read, no `0600` touch, no create and
+   * no rebuild — any of those is a plain `open`/`close` of the database file,
+   * which, when the loop runs in the server's own process, would drop the
+   * server's locks on it (POSIX locks belong to the process). Refuses a
+   * missing file or one that isn't ours and current, rather than repairing
+   * it: that is the server's job.
+   */
+  static openExisting(
+    versionDir: string,
+    path: string,
+    sqlite: SqliteModule,
+    clock: Clock = realClock
+  ): BodyIndexWriter | { reason: string } {
+    // stat() takes no descriptor, so it can't release anyone's locks.
+    if (!existsSync(path)) return { reason: `body index ${path} does not exist` };
+    let db: SqliteDatabase | null = null;
+    try {
+      db = new sqlite.DatabaseSync(path);
+      writerPragmas(db);
+      const mismatch = stampMismatch(db);
+      if (mismatch) throw new Error(mismatch);
+      return new BodyIndexWriter(versionDir, path, db, null, clock);
+    } catch (err) {
+      try {
+        db?.close();
+      } catch {
+        /* ignore */
+      }
+      return {
+        reason: `body index could not be opened: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
+
   setMeta(key: keyof IndexMeta, value: string | number): void {
     this.db
       .prepare(
@@ -700,14 +768,6 @@ export class BodyIndexWriter {
   /** Whether a full walk is running. */
   get walking(): boolean {
     return this.walk !== null;
-  }
-
-  /** Whether a full walk is due (`intervalMs` since the last one finished, or never ran). */
-  walkDue(intervalMs: number): boolean {
-    return (
-      this.walk === null &&
-      (this.lastWalkDone === 0 || this.clock.now() - this.lastWalkDone >= intervalMs)
-    );
   }
 
   /** Start a full walk now (no-op while one is running). */
@@ -730,7 +790,7 @@ export class BodyIndexWriter {
          size = excluded.size, state = ${DocState.queued}`
     );
     let finished: boolean;
-    this.db.exec("BEGIN");
+    this.db.exec("BEGIN IMMEDIATE");
     try {
       finished = walk.step(t0 + budgetMs, this.clock, (id, path, mtime, size) => {
         if (!rowIsCurrent(get.get(id), path, mtime, size)) queue.run(id, path, mtime, size);
@@ -744,8 +804,7 @@ export class BodyIndexWriter {
     walk.workMs += this.clock.monotonic() - t0;
     if (finished) {
       this.walk = null;
-      this.lastWalkDone = this.clock.now();
-      this.setMeta("lastFullWalk", new Date(this.lastWalkDone).toISOString());
+      this.setMeta("lastFullWalk", new Date(this.clock.now()).toISOString());
       this.setMeta("lastWalkMs", Math.round(walk.workMs));
       this.setMeta("lastWalkFiles", walk.files);
     }
@@ -798,7 +857,9 @@ export class BodyIndexWriter {
    * (with or without text), partial, too large, or unreadable when reading or
    * parsing it failed — never left to fail the whole batch again, so one bad
    * file can't stall the index. A file that vanished drops its row: it is no
-   * longer the message's file. `maxBytes` leaves larger files for later (a search's
+   * longer the message's file. Each batch is picked inside its own write
+   * transaction, so two connections indexing at once never parse the same
+   * message twice. `maxBytes` leaves larger files for later (a search's
    * catch-up uses it, so it never waits on a big parse).
    */
   indexStep(budgetMs: number, opts: { maxBytes?: number } = {}): number {
@@ -814,11 +875,12 @@ export class BodyIndexWriter {
     const addBody = this.prep(`INSERT INTO bodies (rowid, body) VALUES (?, ?)`);
     let done = 0;
     const failures = new Set<string>();
-    while (this.clock.monotonic() < deadline) {
-      const batch = next.all();
-      if (batch.length === 0) break;
-      this.db.exec("BEGIN");
+    let more = true;
+    while (more && this.clock.monotonic() < deadline) {
+      this.db.exec("BEGIN IMMEDIATE");
       try {
+        const batch = next.all();
+        more = batch.length > 0;
         for (const r of batch) {
           // At least one message per slice, so a slice always makes progress.
           if (done > 0 && this.clock.monotonic() >= deadline) break;
@@ -868,7 +930,7 @@ export class BodyIndexWriter {
     );
     const delDoc = this.prep(`DELETE FROM docs WHERE id = ?`);
     const delBody = this.deleteBodyStatement();
-    this.db.exec("BEGIN");
+    this.db.exec("BEGIN IMMEDIATE");
     try {
       for (const path of paths) {
         const name = basename(path);

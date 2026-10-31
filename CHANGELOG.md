@@ -64,14 +64,75 @@ regression test.
 - **Body index: only Mail's message files are indexed.** An attachment saved
   as `…/Attachments/…/123.emlx` was indexed as message 123; only files in a
   `Messages` folder count now.
-- **Body index: a search no longer swallows the file watcher's wake-up.** A
-  search takes the queued file events, which cancelled the background pass they
-  had scheduled: a walk they asked for, or files its 50 ms catch-up didn't get
-  to, waited for the next timed walk (up to 10 minutes). The loop now picks
-  them up at once. The catch-up itself never parses a file over 1 MB, so the
-  search keeps to its 50 ms.
+- **Body index: a search's catch-up never parses a file over 1 MB**; the build
+  does, so the search keeps to its 50 ms.
 - **Body index: until the first walk has finished**, messages it hasn't reached
   are reported as not indexed yet, not as not downloaded.
+
+## [2.20.47] - 2026-10-30
+
+### Changed
+
+- **The opt-in body index builds in a short-lived child process, and gives the
+  memory back.** Follow-up to
+  [#353](https://github.com/sweetrb/apple-mail-mcp/pull/353). With
+  `APPLE_MAIL_MCP_BODY_INDEX=1`, walking the Mail store and parsing `.emlx`
+  files no longer run in the server: the writer forks its own bundle
+  (`build/index.js --body-index-builder`) when there is such work and stops it as
+  soon as it reports it has caught up. The writer lock, the FSEvents watcher and
+  the cheap work (applying file events, a search's catch-up) stay in the server.
+  - **Memory.** On a 21,924-message store the server's physical footprint stays
+    at the flag-off level through the first build and after it (68 MB; flag off
+    66–68 MB), instead of peaking at 291–309 MB and holding 212–274 MB until
+    restart. The build process itself peaks at 306–330 MB RSS and exits when it
+    has caught up. While it runs, server and build process together use more
+    than the in-process build did (420–444 MB vs 324–335 MB RSS), because the
+    build process loads the whole server bundle; all of it is returned when it
+    exits.
+  - **Responsiveness.** The server's main thread no longer runs the build's
+    slices: MCP `ping` p95 during a build went from 46–49 ms to 0.3 ms.
+  - **Why not a `worker_thread`.** Measured first: a terminated worker's V8
+    heap pages stay in the process (114 MB of worker garbage was still there
+    30 s after `terminate()`, with or without `--no-memory-pool`, on Node 26.5
+    and 26.13), so a worker fixes the latency but not the memory.
+  - **One writer at a time.** While the build process runs it owns the index's
+    writes; the server hands it file events instead of writing them. Every write
+    transaction is now `BEGIN IMMEDIATE` under `busy_timeout`, so the rare
+    overlap waits instead of failing with `SQLITE_BUSY`.
+  - **Never outlives the server.** The build process gets an empty environment
+    (the index path and store directory come over IPC), no Node flags but
+    `--experimental-sqlite` when the server has it, and a discarded stdout, so
+    nothing it prints can reach the MCP stream. It exits when its IPC channel
+    closes or when it is orphaned (`ppid` 1), and never holds the writer lock.
+    With no `TMPDIR`, its SQLite connection keeps temporary files in memory
+    rather than in the shared `/var/tmp` (the server's does too).
+  - **Failures don't stop the index.** A build process that crashes, fails a
+    step or stops responding (it reports every 5 s; nothing for 60 s and it is
+    stopped) is noted in `lastError` and `doctor` and started again after 5 s,
+    then at the walk interval while it keeps failing; a search never waits on
+    it. One that can't start, can't read a Mail store the server itself can
+    read, or runs other code than the server (its files were updated on disk
+    while the server ran; the two compare a protocol and schema number) is
+    noted, and the build runs on the server's main thread as before — for an
+    hour, then a build process is tried again. A store the server can't read
+    either is not blamed on the build process. `doctor` reports where the build
+    runs and whether it is running.
+  - **Full Disk Access.** The build process is the same Node binary, forked by
+    the server, so macOS attributes its file access to the same responsible
+    process as the server's — verified on a host-launched server (Claude Desktop
+    launches it through its `disclaimer` helper, which makes the server its own
+    responsible process).
+
+### Fixed
+
+- **Body index: a walk that can't list the Mail store fails instead of reading
+  it as empty.** Before, losing access to the store's root (Full Disk Access
+  revoked, the store moved) let the walk finish with no files and drop every
+  indexed message; now the walk fails, the error is noted, and nothing is
+  dropped.
+- **Body index: a walk requested by a coalesced file event or a renamed mailbox
+  is no longer lost** when the build stops before finishing it; it is asked for
+  again.
 
 ## [2.20.46] - 2026-10-30
 

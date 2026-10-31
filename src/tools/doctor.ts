@@ -108,8 +108,9 @@ export async function runDoctor(mailManager: AppleMailManager): Promise<DoctorRe
 }
 
 /**
- * The body index line: enabled or not, path, writer or reader, coverage, last
- * full walk, last rebuild and last error. Null when the flag isn't set at all.
+ * The body index line: enabled or not, path, writer or reader, where the build
+ * runs and whether it is running, coverage, last full walk, last rebuild and
+ * last error. Null when the flag isn't set at all.
  */
 export function bodyIndexCheck(
   s: BodyIndexStatus,
@@ -131,6 +132,16 @@ export function bodyIndexCheck(
       s.role === "writer"
         ? `this instance is the writer (${s.watching ? "watching the mail store" : "no file watcher; timed walks only"})`
         : "this instance is a reader (another instance keeps the index current)"
+    );
+  }
+  if (s.build) {
+    const b = s.build;
+    parts.push(
+      b.fallback
+        ? `${b.fallback}${b.running ? "; build running" : ""}`
+        : b.running
+          ? `build running in a ${b.runsOn}`
+          : `no build running (it starts in a ${b.runsOn} when there is work)`
     );
   }
   if (s.counts) {

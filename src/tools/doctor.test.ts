@@ -112,6 +112,7 @@ describe("body index check", () => {
       path: "/x/body-index.db",
       role: "writer",
       watching: true,
+      build: { runsOn: "child process", running: true },
       counts: { indexed: 68000, queued: 12, partial: 3, tooLarge: 1, unreadable: 2 },
       meta: {
         lastFullWalk: "2026-10-30T15:00:00.000Z",
@@ -124,12 +125,39 @@ describe("body index check", () => {
     expect(c?.status).toBe("ok");
     expect(c?.detail).toContain("file /x/body-index.db");
     expect(c?.detail).toContain("this instance is the writer (watching the mail store)");
+    expect(c?.detail).toContain("build running in a child process");
     expect(c?.detail).toContain(
       "68,003 messages indexed, 12 not indexed yet, 3 with no body downloaded yet, 1 over the 25 MB cap, 2 that couldn't be read"
     );
     expect(c?.detail).toContain("last full walk 2026-10-30T15:00:00.000Z (68,016 files, 900 ms)");
     expect(c?.detail).toContain("rebuilt 2026-10-29T10:00:00.000Z (schema v2 → v3)");
     expect(c?.detail).toContain("last error: 2026-10-30T15:01:00.000Z file watcher stopped");
+  });
+
+  it("says when no build is running, and when it runs on the main thread instead", () => {
+    const idle = bodyIndexCheck({
+      enabled: true,
+      role: "writer",
+      build: { runsOn: "child process", running: false },
+    });
+    expect(idle?.detail).toContain(
+      "no build running (it starts in a child process when there is work)"
+    );
+    const why = "build process could not start (exit code 1); building on the main thread";
+    const fallback = bodyIndexCheck({
+      enabled: true,
+      role: "writer",
+      build: { runsOn: "main thread", running: true, fallback: why },
+    });
+    expect(fallback?.status).toBe("ok");
+    expect(fallback?.detail).toContain(`${why}; build running`);
+    const idleFallback = bodyIndexCheck({
+      enabled: true,
+      role: "writer",
+      build: { runsOn: "main thread", running: false, fallback: why },
+    });
+    expect(idleFallback?.detail).toContain(why);
+    expect(idleFallback?.detail).not.toContain("build running");
   });
 
   it("warns, with the shared Full Disk Access wording, when it can't run", () => {

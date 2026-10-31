@@ -150,6 +150,27 @@ import {
   reconciliationWarnings,
   type DestructiveOpReport,
 } from "@/services/auditLog.js";
+import { BODY_INDEX_BUILDER_ARG, runBuilderProcess } from "@/utils/bodyIndexBuild.js";
+import { realClock } from "@/utils/bodyIndex.js";
+import { loadSqlite } from "@/utils/envelopeIndex.js";
+
+// Forked by the body index writer (bodyIndexSync.ts) to run its build: be
+// that, never the MCP server. Before anything else here, so the build process
+// reads no config and never touches stdio. It exits by itself (when its IPC
+// channel closes or its parent is gone), so the rest of this file never runs.
+if (process.argv.includes(BODY_INDEX_BUILDER_ARG) && process.send) {
+  runBuilderProcess(
+    {
+      send: (msg) => process.send!(msg),
+      onMessage: (fn) => process.on("message", fn),
+      onDisconnect: (fn) => process.on("disconnect", fn),
+      ppid: () => process.ppid,
+      exit: (code) => process.exit(code),
+    },
+    { sqlite: loadSqlite(), clock: realClock }
+  );
+  await new Promise<never>(() => {});
+}
 
 // Load file-based config FIRST (2.1.1) — before anything reads APPLE_MAIL_MCP_*.
 // Lets users configure the server when the host app strips the MCP env block.

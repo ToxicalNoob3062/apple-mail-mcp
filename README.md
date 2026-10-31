@@ -390,10 +390,17 @@ on disk. ([#349](https://github.com/sweetrb/apple-mail-mcp/issues/349))
 - **First build and upkeep.** One server instance (the first to start) builds and
   updates the index in the background in small slices; other instances — one per
   conversation in some hosts — search it read-only and take over if that instance
-  exits. A message file that can't be read or parsed is skipped, counted, and tried
+  exits. The walking and parsing run in a short-lived child process (the same
+  `build/index.js` on the same Node runtime, so the same Full Disk Access grant
+  applies), which exits as soon as it has caught up: the server stays responsive during
+  a build, and the memory parsing takes goes back to the system instead of staying with
+  the server. If that process can't start or can't read the store, the server builds
+  on its own main thread instead and `doctor` says why (and tries a build process again
+  an hour later). A build process that stops responding for a minute is stopped and
+  restarted. A message file that can't be read or parsed is skipped, counted, and tried
   again on the next full check; it never holds up the rest. New mail is picked up through
-  file-system events within seconds, with a full check every 10 minutes as a safety net.
-  A build of ~22,000 messages took about 30 s on an Apple-silicon Mac.
+  file-system events within seconds, with a full check every 10 minutes as a safety
+  net. A build of ~22,000 messages took about 40 s on an Apple-silicon Mac.
 - **What it matches.** Words and word beginnings, ignoring case and accents: `invoice`
   finds `invoices` and `Invoice`, but not `reinvoice`, as the index stores words, not
   text. Text with no letters or digits (`@`), and Chinese, Japanese or Thai text (written
