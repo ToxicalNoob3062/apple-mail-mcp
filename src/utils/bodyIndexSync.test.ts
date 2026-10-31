@@ -3,11 +3,13 @@
  * a synthetic mail store with an injected watcher and clock.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, unlinkSync } from "fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, unlinkSync } from "fs";
 import { tmpdir } from "os";
 import { spawn } from "child_process";
 import { join } from "path";
 import {
+  BUILD_STALL_MS,
+  FALLBACK_RETRY_MS,
   PAUSE_MS,
   RESCAN_WATCHED_MS,
   SEARCH_CATCHUP_MS,
@@ -30,8 +32,13 @@ import {
   stopBodyIndexing,
   type WatchFn,
 } from "@/utils/bodyIndexSync.js";
-import { bodyIndexLockPath, type Clock } from "@/utils/bodyIndex.js";
-import type { BuilderInit, BuilderWork } from "@/utils/bodyIndexBuild.js";
+import { BODY_INDEX_SCHEMA_VERSION, bodyIndexLockPath, type Clock } from "@/utils/bodyIndex.js";
+import {
+  BUILDER_PROTOCOL,
+  HEARTBEAT_MS,
+  type BuilderInit,
+  type BuilderWork,
+} from "@/utils/bodyIndexBuild.js";
 import { FULL_DISK_ACCESS_REASON, searchEnvelopeIndex } from "@/utils/envelopeIndex.js";
 import {
   buildEnvelopeIndex,
@@ -545,11 +552,11 @@ describeIfSqlite("the build: started when there is work, stopped when there is n
   }
 
   /** Start with a hand-driven runner; returns it after the first tick handed it a walk. */
-  function startedManual(onStart?: Parameters<typeof manualRunner>[0]) {
+  function startedManual(onStart?: Parameters<typeof manualRunner>[0], clock?: Clock) {
     vi.useFakeTimers();
     const m = manualRunner(onStart);
     const fake = fakeWatch();
-    resetBodyIndexForTests({ watch: fake.watch, runner: m.runner });
+    resetBodyIndexForTests({ watch: fake.watch, runner: m.runner, ...(clock ? { clock } : {}) });
     startBackgroundIndexing();
     expect(isBodyIndexBuilding()).toBe(false);
     vi.advanceTimersByTime(PAUSE_MS);
@@ -560,6 +567,8 @@ describeIfSqlite("the build: started when there is work, stopped when there is n
       indexPath: indexFile,
       sliceMs: SLICE_MS,
       pauseMs: PAUSE_MS,
+      protocol: BUILDER_PROTOCOL,
+      schemaVersion: BODY_INDEX_SCHEMA_VERSION,
     });
     return { ...m, fake };
   }
@@ -746,6 +755,103 @@ describeIfSqlite("the build: started when there is work, stopped when there is n
     err.mockRestore();
     expect(m.starts).toHaveLength(1);
     expect(find("harbour")).toEqual({ ids: [1], partial: false });
+  });
+
+  /** Fake timers move Date but not performance.now(); the watchdog reads the monotonic clock. */
+  const fakeClock: Clock = { now: () => Date.now(), monotonic: () => Date.now() };
+
+  it("a build process that stops responding is stopped and restarted; heartbeats keep a busy one alive", () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const m = startedManual(undefined, fakeClock);
+    m.last().events.report({ type: "ready", pid: 7 });
+    for (let i = 0; i < 40; i++) {
+      vi.advanceTimersByTime(HEARTBEAT_MS);
+      m.last().events.report({ type: "alive" });
+    }
+    expect(m.last().stopped).toBe(false); // 200 s of work, and alive throughout
+    vi.advanceTimersByTime(BUILD_STALL_MS + BUILD_STALL_MS / 4);
+    expect(m.starts[0].stopped).toBe(true);
+    expect(bodyIndexStatus().lastError).toMatch(/stopped responding \(nothing for 60 s\)/);
+    // Restarted like a crash, walk and all; still in a build process.
+    expect(m.starts).toHaveLength(2);
+    expect(m.last().posts).toEqual([{ type: "work", seq: 2, walk: true, paths: [] }]);
+    expect(bodyIndexStatus().build).toEqual({ runsOn: "child process", running: true });
+    stopBodyIndexing();
+    err.mockRestore();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("one that never says it is ready moves the build to the main thread", () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const m = startedManual(undefined, fakeClock);
+    vi.advanceTimersByTime(BUILD_STALL_MS + BUILD_STALL_MS / 4);
+    expect(m.starts[0].stopped).toBe(true);
+    expect(bodyIndexStatus().build).toMatchObject({
+      runsOn: "main thread",
+      fallback: expect.stringContaining("stopped responding"),
+    });
+    runToIdle();
+    err.mockRestore();
+    expect(find("harbour")).toEqual({ ids: [1], partial: false });
+  });
+
+  it("a build process started from other files on disk moves the build to the main thread", () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const m = startedManual();
+    m.last().events.report({
+      type: "failed",
+      where: "version",
+      message: "the build process runs other code than the server (…)",
+    });
+    expect(m.last().stopped).toBe(true);
+    expect(bodyIndexStatus().build).toMatchObject({
+      runsOn: "main thread",
+      fallback:
+        "the build process runs other code than the server (…); building on the main thread",
+    });
+    runToIdle();
+    err.mockRestore();
+    expect(find("harbour")).toEqual({ ids: [1], partial: false });
+  });
+
+  // Root lists any directory whatever its mode.
+  it.skipIf(process.getuid?.() === 0)(
+    "doesn't blame the build process for a store the server can't read either: noted and retried, no fallback",
+    () => {
+      const err = vi.spyOn(console, "error").mockImplementation(() => {});
+      const m = startedManual();
+      chmodSync(v10, 0o000);
+      try {
+        m.last().events.report({
+          type: "failed",
+          where: "store",
+          message: "can't read the Mail store (EPERM)",
+        });
+      } finally {
+        chmodSync(v10, 0o755);
+      }
+      expect(m.last().stopped).toBe(true);
+      expect(bodyIndexStatus().build).toEqual({ runsOn: "child process", running: false });
+      expect(bodyIndexStatus().lastError).toMatch(
+        /index build could not start: can't read the Mail store \(EPERM\)/
+      );
+      vi.advanceTimersByTime(BUILD_RESTART_MS);
+      err.mockRestore();
+      expect(m.starts).toHaveLength(2);
+    }
+  );
+
+  it("tries a build process again an hour after falling back to the main thread", () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const m = startedManual();
+    m.last().events.exit("exit code 1"); // before ready: couldn't start
+    runToIdle();
+    expect(m.starts).toHaveLength(1);
+    expect(bodyIndexStatus().build!.runsOn).toBe("main thread");
+    vi.advanceTimersByTime(FALLBACK_RETRY_MS); // timed walks run on the main thread meanwhile
+    err.mockRestore();
+    expect(m.starts).toHaveLength(2);
+    expect(bodyIndexStatus().build).toEqual({ runsOn: "child process", running: true });
   });
 
   it("shutdown stops a running build", () => {

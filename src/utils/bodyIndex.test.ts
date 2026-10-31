@@ -304,6 +304,20 @@ describeIfSqlite("BodyIndexWriter.openExisting (the build process's open)", () =
     main.close();
   });
 
+  it("keeps SQLite's temporary files in memory on both writer connections (no TMPDIR in the build process)", () => {
+    const main = openWriter(store, path);
+    const second = BodyIndexWriter.openExisting(store, path, sqlite!);
+    if ("reason" in second) throw new Error(second.reason);
+    try {
+      for (const db of [main.db, second.db]) {
+        expect(Number(db.prepare("PRAGMA temp_store").get()!.temp_store)).toBe(2);
+      }
+    } finally {
+      second.close();
+      main.close();
+    }
+  });
+
   it("never creates a missing index (that is the server's job)", () => {
     expect(BodyIndexWriter.openExisting(store, path, sqlite!)).toEqual({
       reason: expect.stringContaining("does not exist"),

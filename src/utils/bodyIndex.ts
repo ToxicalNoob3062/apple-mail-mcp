@@ -495,6 +495,15 @@ class StoreWalk {
 const WRITER_BUSY_TIMEOUT_MS = 5000;
 
 /**
+ * Settings for both writer connections: wait out the other one's write, and
+ * keep SQLite's temporary files in memory — the build process has no TMPDIR,
+ * so they would otherwise land in the shared /var/tmp, holding index pages.
+ */
+function writerPragmas(db: SqliteDatabase): void {
+  db.exec(`PRAGMA busy_timeout = ${WRITER_BUSY_TIMEOUT_MS}; PRAGMA temp_store = MEMORY`);
+}
+
+/**
  * The index file, opened read-write by the writer instance: schema and
  * migrations, the store walk, and indexing. Readers never construct one.
  */
@@ -542,7 +551,7 @@ export class BodyIndexWriter {
         // Readers search while the writer writes, and the build process's
         // connection writes too; wait for a lock briefly instead of failing on
         // the moments they overlap.
-        db.exec(`PRAGMA busy_timeout = ${WRITER_BUSY_TIMEOUT_MS}`);
+        writerPragmas(db);
         // Touches the header and schema, so a damaged file throws here.
         db.prepare(`SELECT count(*) FROM sqlite_master`).get();
         return db;
@@ -620,7 +629,7 @@ export class BodyIndexWriter {
     let db: SqliteDatabase | null = null;
     try {
       db = new sqlite.DatabaseSync(path);
-      db.exec(`PRAGMA busy_timeout = ${WRITER_BUSY_TIMEOUT_MS}`);
+      writerPragmas(db);
       const mismatch = stampMismatch(db);
       if (mismatch) throw new Error(mismatch);
       return new BodyIndexWriter(versionDir, path, db, null, clock);

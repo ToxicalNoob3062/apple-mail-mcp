@@ -32,14 +32,16 @@
  *    write lock up front (`BEGIN IMMEDIATE`) under `busy_timeout`, so the rare
  *    overlap — an error note, a build process still exiting — waits instead
  *    of failing.
- *  - **A build that can't run doesn't stop the index.** One that fails a step
- *    or crashes is noted, stopped and started again after
- *    {@link BUILD_RESTART_MS}, then at the walk interval while it keeps
- *    failing; nothing waits on it, a search least of all. One that can't start
- *    at all (fork failed, or it exited before it was ready) or can't read the
- *    Mail store (no Full Disk Access in a separate process) is noted once, and
- *    the same loop runs on the main thread, as before this split. `doctor`
- *    says which.
+ *  - **A build that can't run doesn't stop the index.** One that fails a step,
+ *    crashes or stops responding (no report for {@link BUILD_STALL_MS}) is
+ *    noted, stopped and started again after {@link BUILD_RESTART_MS}, then at
+ *    the walk interval while it keeps failing; nothing waits on it, a search
+ *    least of all. One that can't start at all (fork failed, or it exited
+ *    before it was ready), can't read a Mail store the server can read (no
+ *    Full Disk Access in a separate process), or runs other code than the
+ *    server (its files were updated on disk) is noted, and the same loop runs
+ *    on the main thread, as before this split — for {@link FALLBACK_RETRY_MS},
+ *    then a build process is tried again. `doctor` says which.
  *  - **Watcher plus walk.** A recursive `fs.watch` (one FSEvents stream on
  *    macOS) reports new, changed, moved and deleted `.emlx` files, applied in a
  *    batch after a short quiet period. FSEvents can coalesce or drop events and
@@ -59,11 +61,12 @@
  * @module utils/bodyIndexSync
  */
 
-import { watch as fsWatch } from "fs";
+import { readdirSync, watch as fsWatch } from "fs";
 import { dirname, join } from "path";
 import { fork } from "child_process";
 import { fileURLToPath } from "url";
 import {
+  BODY_INDEX_SCHEMA_VERSION,
   BodyIndexWriter,
   bodyIndexLockPath,
   bodyIndexPath,
@@ -80,6 +83,7 @@ import {
 } from "@/utils/bodyIndex.js";
 import {
   BODY_INDEX_BUILDER_ARG,
+  BUILDER_PROTOCOL,
   runBuilder,
   type BuilderInit,
   type BuilderReport,
@@ -112,6 +116,10 @@ export const PAUSE_MS = 100;
 export const SEARCH_CATCHUP_MS = 50;
 /** After a failed or crashed build, start it again this soon; after another failure in a row, at the walk interval. */
 export const BUILD_RESTART_MS = 5_000;
+/** A running build that has reported nothing for this long is stuck, and is stopped. */
+export const BUILD_STALL_MS = 60_000;
+/** How long the build stays on the main thread after a build process couldn't run, before one is tried again. */
+export const FALLBACK_RETRY_MS = 60 * 60_000;
 
 /** Whether body search via the local index is switched on. */
 export function isBodyIndexEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -301,8 +309,12 @@ let buildReady = false;
 let buildSeq = 0;
 /** Failed or crashed builds in a row, for the restart delay. */
 let buildFailures = 0;
-/** Why the build runs on the main thread, once a build process couldn't run. */
-let buildFallback: string | null = null;
+/** Why, and since when, the build runs on the main thread, once a build process couldn't run. */
+let buildFallback: { why: string; since: number } | null = null;
+/** Monotonic time of the running build's last report (or of its start). */
+let lastBuildReport = 0;
+/** Checks the running build for {@link BUILD_STALL_MS} of silence. */
+let watchdog: ReturnType<typeof setInterval> | null = null;
 /** Resolves when the last stopped build is gone. */
 let buildStopped: Promise<void> = Promise.resolve();
 /** Wall time the last full walk finished (0: none yet in this process). */
@@ -502,31 +514,45 @@ function handToBuild(w: BodyIndexWriter, walk: boolean, paths: string[]): void {
   b.post({ type: "work", seq: ++buildSeq, walk, paths });
 }
 
+/** Whether the build runs on the main thread now (a build process couldn't, recently). */
+function onMainThread(): boolean {
+  return buildFallback !== null && clock.now() - buildFallback.since < FALLBACK_RETRY_MS;
+}
+
 function startBuild(w: BodyIndexWriter): BuildHandle {
   const init: BuilderInit = {
     versionDir: w.versionDir,
     indexPath: w.path,
     sliceMs: SLICE_MS,
     pauseMs: PAUSE_MS,
+    protocol: BUILDER_PROTOCOL,
+    schemaVersion: BODY_INDEX_SCHEMA_VERSION,
   };
   let handle: BuildHandle | null = null;
   // Events from a build that was since stopped or replaced are dropped.
   const events: BuildEvents = {
     report: (msg) => {
-      if (handle !== null && handle === build) onBuildReport(msg);
+      if (handle === null || handle !== build) return;
+      lastBuildReport = clock.monotonic();
+      onBuildReport(msg);
     },
     exit: (why) => {
       if (handle !== null && handle === build) onBuildExit(why);
     },
   };
   try {
-    handle = (buildFallback ? mainThreadRunner : runner).start(init, events);
+    handle = (onMainThread() ? mainThreadRunner : runner).start(init, events);
   } catch (err) {
     fallBackToMainThread(`build process could not start (${errText(err)})`);
     handle = mainThreadRunner.start(init, events);
   }
   build = handle;
   buildReady = false;
+  lastBuildReport = clock.monotonic();
+  watchdog ??= setInterval(() => {
+    if (build && clock.monotonic() - lastBuildReport >= BUILD_STALL_MS) onBuildStalled();
+  }, BUILD_STALL_MS / 4);
+  watchdog.unref?.();
   return handle;
 }
 
@@ -534,6 +560,8 @@ function stopBuild(): void {
   const b = build;
   build = null;
   buildReady = false;
+  if (watchdog) clearInterval(watchdog);
+  watchdog = null;
   // A walk it didn't finish is gone with it: ask for it again.
   if (walkInFlight) walkRequested = true;
   walkInFlight = false;
@@ -555,10 +583,19 @@ function onBuildReport(msg: BuilderReport): void {
       stopBuild();
       wake(0); // anything that arrived meanwhile; else sleep until the next walk
       return;
+    case "alive":
+      return;
     case "failed":
-      if (msg.where === "store" && !buildFallback) {
+      // Only a build process can lack what the server has: the server's Full
+      // Disk Access, or the server's version of the code.
+      if (
+        !onMainThread() &&
+        (msg.where === "version" || (msg.where === "store" && serverCanReadStore()))
+      ) {
         stopBuild();
-        fallBackToMainThread(`the build process ${msg.message}`);
+        fallBackToMainThread(
+          msg.where === "store" ? `the build process ${msg.message}` : msg.message
+        );
         wake(0);
         return;
       }
@@ -573,12 +610,35 @@ function onBuildReport(msg: BuilderReport): void {
 function onBuildExit(why: string): void {
   const started = buildReady;
   stopBuild();
-  if (!started && !buildFallback) {
+  if (!started && !onMainThread()) {
     fallBackToMainThread(`build process could not start (${why})`);
     wake(0);
     return;
   }
   buildFailed(`build process stopped unexpectedly (${why})`);
+}
+
+/** The running build has said nothing for {@link BUILD_STALL_MS}: stop it, as if it had crashed. */
+function onBuildStalled(): void {
+  const started = buildReady;
+  stopBuild();
+  const why = `the build process stopped responding (nothing for ${BUILD_STALL_MS / 1000} s), so it was stopped`;
+  if (!started && !onMainThread()) {
+    fallBackToMainThread(why);
+    wake(0);
+    return;
+  }
+  buildFailed(why);
+}
+
+/** Whether this process can list the Mail store, which a build process reports it can't. */
+function serverCanReadStore(): boolean {
+  try {
+    readdirSync(writer!.versionDir);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Note a failed or crashed build and try again later; the queue is on disk, nothing is lost. */
@@ -590,8 +650,8 @@ function buildFailed(why: string): void {
 }
 
 function fallBackToMainThread(why: string): void {
-  buildFallback = `${why}; building on the main thread`;
-  noteError("index build", buildFallback);
+  buildFallback = { why: `${why}; building on the main thread`, since: clock.now() };
+  noteError("index build", buildFallback.why);
 }
 
 // --- background loop -------------------------------------------------------------
@@ -766,9 +826,9 @@ export function bodyIndexStatus(): BodyIndexStatus {
     ...(writer
       ? {
           build: {
-            runsOn: buildFallback ? "main thread" : runner.runsOn,
+            runsOn: onMainThread() ? "main thread" : runner.runsOn,
             running: build !== null,
-            ...(buildFallback ? { fallback: buildFallback } : {}),
+            ...(onMainThread() ? { fallback: buildFallback!.why } : {}),
           },
         }
       : {}),

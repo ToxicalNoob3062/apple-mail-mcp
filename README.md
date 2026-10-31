@@ -390,7 +390,9 @@ on disk. ([#349](https://github.com/sweetrb/apple-mail-mcp/issues/349))
   applies), which exits as soon as it has caught up: the server stays responsive during
   a build, and the memory parsing takes goes back to the system instead of staying with
   the server. If that process can't start or can't read the store, the server builds
-  on its own main thread instead and `doctor` says why. New mail is picked up through
+  on its own main thread instead and `doctor` says why (and tries a build process again
+  an hour later). A build process that stops responding for a minute is stopped and
+  restarted. New mail is picked up through
   file-system events within seconds, with a full check every 10 minutes as a safety
   net. A build of ~22,000 messages took about 40 s on an Apple-silicon Mac.
 - **Coverage is always reported.** A body search never presents an incomplete index as

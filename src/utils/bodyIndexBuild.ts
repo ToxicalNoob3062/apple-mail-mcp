@@ -26,12 +26,17 @@
  *  - **Never outlives the server.** The build process exits when its IPC
  *    channel closes or when it finds itself orphaned (`ppid` 1), whichever
  *    comes first, closing its connection on the way out.
+ *  - **Says it is alive** every {@link HEARTBEAT_MS}, so the server can tell a
+ *    build that stopped responding from one that is busy.
+ *  - **Same version as its server, or nothing.** The server's bundle can be
+ *    replaced on disk while it runs (an update); a build process started from
+ *    the new files refuses work from the old server instead of guessing.
  *
  * @module utils/bodyIndexBuild
  */
 
 import { readdirSync } from "fs";
-import { BodyIndexWriter, type Clock } from "@/utils/bodyIndex.js";
+import { BODY_INDEX_SCHEMA_VERSION, BodyIndexWriter, type Clock } from "@/utils/bodyIndex.js";
 import type { SqliteModule } from "@/utils/envelopeIndex.js";
 import { isOrphaned } from "@/utils/orphan.js";
 
@@ -39,6 +44,10 @@ import { isOrphaned } from "@/utils/orphan.js";
 export const BODY_INDEX_BUILDER_ARG = "--body-index-builder";
 /** How often the build process checks whether its parent is gone. */
 export const ORPHAN_CHECK_MS = 2_000;
+/** How often a running build loop reports that it is alive. */
+export const HEARTBEAT_MS = 5_000;
+/** Bumped whenever the messages between the server and the build loop change. */
+export const BUILDER_PROTOCOL = 1;
 
 /** What the build loop needs to open the index; the build process gets it in its `start` message. */
 export interface BuilderInit {
@@ -46,6 +55,9 @@ export interface BuilderInit {
   indexPath: string;
   sliceMs: number;
   pauseMs: number;
+  /** The server's {@link BUILDER_PROTOCOL} and index schema, which the loop must share. */
+  protocol: number;
+  schemaVersion: number;
 }
 
 /** Server → build process, first message: what to open. */
@@ -72,8 +84,13 @@ export type BuilderReport =
   | { type: "ready"; pid: number }
   | { type: "walked" }
   | { type: "idle"; seq: number }
-  /** `store`: it can't read the Mail store (no Full Disk Access in this process). */
-  | { type: "failed"; where: "open" | "store" | "step"; message: string };
+  /** Sent every {@link HEARTBEAT_MS} while the loop runs. */
+  | { type: "alive" }
+  /**
+   * `store`: it can't read the Mail store (no Full Disk Access in this
+   * process). `version`: it isn't the server's version of the code.
+   */
+  | { type: "failed"; where: "open" | "store" | "step" | "version"; message: string };
 
 /** The loop's side of the channel: the build process's IPC, or a stand-in on the main thread. */
 export interface BuilderPort {
@@ -96,6 +113,17 @@ export function runBuilder(
   init: BuilderInit,
   deps: { sqlite: SqliteModule | null; clock: Clock }
 ): { stop(): void } {
+  if (init.protocol !== BUILDER_PROTOCOL || init.schemaVersion !== BODY_INDEX_SCHEMA_VERSION) {
+    port.postMessage({
+      type: "failed",
+      where: "version",
+      message:
+        `the build process runs other code than the server (its files changed on disk since the server started): ` +
+        `protocol ${BUILDER_PROTOCOL} and index schema v${BODY_INDEX_SCHEMA_VERSION} here, ` +
+        `protocol ${String(init.protocol)} and schema v${String(init.schemaVersion)} in the server`,
+    });
+    return { stop() {} };
+  }
   const opened = deps.sqlite
     ? BodyIndexWriter.openExisting(init.versionDir, init.indexPath, deps.sqlite, deps.clock)
     : { reason: "node:sqlite unavailable in the build process" };
@@ -118,9 +146,13 @@ export function runBuilder(
   let seq = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let stopped = false;
+  // A stuck slice blocks this timer too, which is how the server notices.
+  const heartbeat = setInterval(() => port.postMessage({ type: "alive" }), HEARTBEAT_MS);
+  heartbeat.unref?.();
 
   const halt = () => {
     stopped = true;
+    clearInterval(heartbeat);
     if (timer) clearTimeout(timer);
     timer = null;
   };

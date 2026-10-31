@@ -12,8 +12,12 @@ import { join } from "path";
 import { fileURLToPath } from "url";
 import { fork, spawn, type ChildProcess } from "child_process";
 import { build as esbuild } from "esbuild";
-import { BodyIndexWriter } from "@/utils/bodyIndex.js";
-import { BODY_INDEX_BUILDER_ARG, type BuilderReport } from "@/utils/bodyIndexBuild.js";
+import { BODY_INDEX_SCHEMA_VERSION, BodyIndexWriter } from "@/utils/bodyIndex.js";
+import {
+  BODY_INDEX_BUILDER_ARG,
+  BUILDER_PROTOCOL,
+  type BuilderReport,
+} from "@/utils/bodyIndexBuild.js";
 import {
   PAUSE_MS,
   STOP_GRACE_MS,
@@ -244,7 +248,14 @@ describeIfSqlite("the build in a child process", () => {
       execArgv: [],
       env: probed.env,
       stdoutIsDevNull: true,
-      init: { versionDir: v10, indexPath: indexFile, sliceMs: 50, pauseMs: 100 },
+      init: {
+        versionDir: v10,
+        indexPath: indexFile,
+        sliceMs: 50,
+        pauseMs: 100,
+        protocol: BUILDER_PROTOCOL,
+        schemaVersion: BODY_INDEX_SCHEMA_VERSION,
+      },
     });
   }, 30_000);
 
@@ -261,13 +272,45 @@ describeIfSqlite("the build in a child process", () => {
     const report = new Promise((r) => child.once("message", r));
     child.send({
       type: "start",
-      init: { versionDir: v10, indexPath: indexFile, sliceMs: 50, pauseMs: 100 },
+      init: {
+        versionDir: v10,
+        indexPath: indexFile,
+        sliceMs: 50,
+        pauseMs: 100,
+        protocol: BUILDER_PROTOCOL,
+        schemaVersion: BODY_INDEX_SCHEMA_VERSION,
+      },
     });
     // No index file yet: it reports instead of creating one. It read no config, wrote no stdout.
     expect(await report).toMatchObject({ type: "failed", where: "open" });
     expect(existsSync(indexFile)).toBe(false);
     await realWait(300);
     expect(out).toBe("");
+    child.disconnect();
+    expect(await exited).toBe(0);
+  }, 30_000);
+
+  it("a real build process refuses a server of another version, before touching anything", async () => {
+    const child = fork(bundle, [BODY_INDEX_BUILDER_ARG], {
+      env: {},
+      execArgv: [],
+      stdio: ["ignore", "ignore", "inherit", "ipc"],
+    });
+    const exited = new Promise<number | null>((r) => child.once("exit", (code) => r(code)));
+    const report = new Promise((r) => child.once("message", r));
+    child.send({
+      type: "start",
+      init: {
+        versionDir: v10,
+        indexPath: indexFile,
+        sliceMs: 50,
+        pauseMs: 100,
+        protocol: BUILDER_PROTOCOL + 1,
+        schemaVersion: BODY_INDEX_SCHEMA_VERSION,
+      },
+    });
+    expect(await report).toMatchObject({ type: "failed", where: "version" });
+    expect(existsSync(indexFile)).toBe(false);
     child.disconnect();
     expect(await exited).toBe(0);
   }, 30_000);
@@ -355,7 +398,14 @@ describeIfSqlite("the build in a child process", () => {
     );
     const reports: BuilderReport[] = [];
     const handle = childProcessRunner(stubborn).start(
-      { versionDir: v10, indexPath: indexFile, sliceMs: 50, pauseMs: 100 },
+      {
+        versionDir: v10,
+        indexPath: indexFile,
+        sliceMs: 50,
+        pauseMs: 100,
+        protocol: BUILDER_PROTOCOL,
+        schemaVersion: BODY_INDEX_SCHEMA_VERSION,
+      },
       { report: (m) => reports.push(m), exit: () => {} }
     );
     await until(() => reports.length === 1);

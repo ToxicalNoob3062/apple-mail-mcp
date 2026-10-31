@@ -6,8 +6,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { BodyIndexWriter, ftsPhrase } from "@/utils/bodyIndex.js";
+import { BODY_INDEX_SCHEMA_VERSION, BodyIndexWriter, ftsPhrase } from "@/utils/bodyIndex.js";
 import {
+  BUILDER_PROTOCOL,
+  HEARTBEAT_MS,
   ORPHAN_CHECK_MS,
   runBuilder,
   runBuilderProcess,
@@ -22,15 +24,21 @@ import { plainMessage, sqlite, writeEmlx } from "@/utils/envelopeIndex.testFixtu
 
 const describeIfSqlite = sqlite ? describe : describe.skip;
 
+/** A stand-in channel; heartbeats are counted apart from the other reports. */
 function port() {
   const reports: BuilderReport[] = [];
+  let alive = 0;
   let listener: ((w: BuilderWork) => void) | null = null;
   return {
     reports,
+    alive: () => alive,
     types: () => reports.map((r) => r.type),
     send: (w: Omit<BuilderWork, "type">) => listener!({ type: "work", ...w }),
     port: {
-      postMessage: (m: BuilderReport) => reports.push(m),
+      postMessage: (m: BuilderReport) => {
+        if (m.type === "alive") alive++;
+        else reports.push(m);
+      },
       on: (_e: "message", fn: (w: BuilderWork) => void) => {
         listener = fn;
       },
@@ -49,7 +57,14 @@ describeIfSqlite("runBuilder", () => {
     const store = join(root, "V10");
     writeEmlx(store, "ACC", "INBOX", 1, plainMessage("a", "harbour cruise"));
     writeEmlx(store, "ACC", "INBOX", 2, plainMessage("b", "dentist appointment"));
-    init = { versionDir: store, indexPath: join(root, "body.db"), sliceMs: 50, pauseMs: 100 };
+    init = {
+      versionDir: store,
+      indexPath: join(root, "body.db"),
+      sliceMs: 50,
+      pauseMs: 100,
+      protocol: BUILDER_PROTOCOL,
+      schemaVersion: BODY_INDEX_SCHEMA_VERSION,
+    };
     // The main thread has created and stamped the file before any build starts.
     const opened = BodyIndexWriter.open(store, init.indexPath, sqlite!);
     if ("reason" in opened) throw new Error(opened.reason);
@@ -78,9 +93,40 @@ describeIfSqlite("runBuilder", () => {
     expect(p.reports.at(-1)).toEqual({ type: "idle", seq: 1 });
     expect(main.state().counts.indexed).toBe(2);
     expect(hits("dentist")).toEqual([2]);
-    // Idle: no timer left spinning.
-    expect(vi.getTimerCount()).toBe(0);
+    // Idle: no slice left pending, only the heartbeat until it is stopped.
+    expect(vi.getTimerCount()).toBe(1);
     loop.stop();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("says it is alive every few seconds while it runs, and not once stopped", () => {
+    const p = port();
+    const loop = runBuilder(p.port, init, deps());
+    vi.advanceTimersByTime(HEARTBEAT_MS * 3);
+    expect(p.alive()).toBe(3);
+    loop.stop();
+    vi.advanceTimersByTime(HEARTBEAT_MS * 3);
+    expect(p.alive()).toBe(3);
+  });
+
+  it("refuses to run for a server of another version (its files changed on disk)", () => {
+    for (const other of [
+      { ...init, protocol: BUILDER_PROTOCOL + 1 },
+      { ...init, schemaVersion: BODY_INDEX_SCHEMA_VERSION - 1 },
+    ]) {
+      const p = port();
+      const loop = runBuilder(p.port, other, deps());
+      expect(p.reports).toEqual([
+        {
+          type: "failed",
+          where: "version",
+          message: expect.stringContaining("other code than the server"),
+        },
+      ]);
+      expect(() => loop.stop()).not.toThrow();
+    }
+    expect(main.state().counts.queued).toBe(0); // it touched nothing
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("applies file changes without a walk, and reports the newest hand-off it saw", () => {
@@ -109,7 +155,7 @@ describeIfSqlite("runBuilder", () => {
     });
     p.send({ seq: 1, walk: true, paths: [] });
     vi.advanceTimersByTime(0);
-    expect(vi.getTimerCount()).toBe(1); // the pause before the next slice
+    expect(vi.getTimerCount()).toBe(2); // the pause before the next slice, and the heartbeat
     vi.advanceTimersByTime(60_000);
     expect(p.reports.at(-1)).toEqual({ type: "idle", seq: 1 });
     loop.stop();
@@ -225,7 +271,14 @@ describeIfSqlite("runBuilderProcess (the forked build process)", () => {
     root = mkdtempSync(join(tmpdir(), "bodyidx-proc-"));
     const store = join(root, "V10");
     writeEmlx(store, "ACC", "INBOX", 1, plainMessage("a", "harbour cruise"));
-    init = { versionDir: store, indexPath: join(root, "body.db"), sliceMs: 50, pauseMs: 100 };
+    init = {
+      versionDir: store,
+      indexPath: join(root, "body.db"),
+      sliceMs: 50,
+      pauseMs: 100,
+      protocol: BUILDER_PROTOCOL,
+      schemaVersion: BODY_INDEX_SCHEMA_VERSION,
+    };
     const opened = BodyIndexWriter.open(store, init.indexPath, sqlite!);
     if ("reason" in opened) throw new Error(opened.reason);
     main = opened;
@@ -245,7 +298,11 @@ describeIfSqlite("runBuilderProcess (the forked build process)", () => {
     f.state.onMessage!({ type: "start", init }); // only one loop
     f.state.onMessage!({ type: "work", seq: 2, walk: true, paths: [] });
     vi.advanceTimersByTime(5_000);
-    expect(f.state.sent.map((m) => m.type)).toEqual(["ready", "walked", "idle"]);
+    expect(f.state.sent.map((m) => m.type).filter((t) => t !== "alive")).toEqual([
+      "ready",
+      "walked",
+      "idle",
+    ]);
     expect(main.state().counts.indexed).toBe(1);
     expect(f.state.exited).toBeNull();
   });

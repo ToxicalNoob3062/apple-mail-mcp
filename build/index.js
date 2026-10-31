@@ -98736,7 +98736,7 @@ import {
   existsSync as existsSync6,
   writeFileSync as writeFileSync4,
   readFileSync as readFileSync4,
-  readdirSync as readdirSync6,
+  readdirSync as readdirSync7,
   unlinkSync as unlinkSync3,
   copyFileSync,
   renameSync as renameSync2,
@@ -100165,6 +100165,9 @@ var StoreWalk = class {
   }
 };
 var WRITER_BUSY_TIMEOUT_MS = 5e3;
+function writerPragmas(db) {
+  db.exec(`PRAGMA busy_timeout = ${WRITER_BUSY_TIMEOUT_MS}; PRAGMA temp_store = MEMORY`);
+}
 var BodyIndexWriter = class _BodyIndexWriter {
   constructor(versionDir, path3, db, rebuilt, clock2) {
     this.versionDir = versionDir;
@@ -100199,7 +100202,7 @@ var BodyIndexWriter = class _BodyIndexWriter {
       ensurePrivateFile(path3);
       const db2 = new sqlite.DatabaseSync(path3);
       try {
-        db2.exec(`PRAGMA busy_timeout = ${WRITER_BUSY_TIMEOUT_MS}`);
+        writerPragmas(db2);
         db2.prepare(`SELECT count(*) FROM sqlite_master`).get();
         return db2;
       } catch (err) {
@@ -100266,7 +100269,7 @@ var BodyIndexWriter = class _BodyIndexWriter {
     let db = null;
     try {
       db = new sqlite.DatabaseSync(path3);
-      db.exec(`PRAGMA busy_timeout = ${WRITER_BUSY_TIMEOUT_MS}`);
+      writerPragmas(db);
       const mismatch = stampMismatch(db);
       if (mismatch) throw new Error(mismatch);
       return new _BodyIndexWriter(versionDir, path3, db, null, clock2);
@@ -100853,7 +100856,7 @@ function readMessageFromStore(id, opts = {}) {
 }
 
 // src/utils/bodyIndexSync.ts
-import { watch as fsWatch } from "fs";
+import { readdirSync as readdirSync6, watch as fsWatch } from "fs";
 import { dirname as dirname4, join as join9 } from "path";
 import { fork } from "child_process";
 import { fileURLToPath } from "url";
@@ -100869,10 +100872,21 @@ function isOrphaned(ppid = process.ppid) {
 // src/utils/bodyIndexBuild.ts
 var BODY_INDEX_BUILDER_ARG = "--body-index-builder";
 var ORPHAN_CHECK_MS = 2e3;
+var HEARTBEAT_MS = 5e3;
+var BUILDER_PROTOCOL = 1;
 function errText3(err) {
   return err instanceof Error ? err.message : String(err);
 }
 function runBuilder(port, init, deps) {
+  if (init.protocol !== BUILDER_PROTOCOL || init.schemaVersion !== BODY_INDEX_SCHEMA_VERSION) {
+    port.postMessage({
+      type: "failed",
+      where: "version",
+      message: `the build process runs other code than the server (its files changed on disk since the server started): protocol ${BUILDER_PROTOCOL} and index schema v${BODY_INDEX_SCHEMA_VERSION} here, protocol ${String(init.protocol)} and schema v${String(init.schemaVersion)} in the server`
+    });
+    return { stop() {
+    } };
+  }
   const opened = deps.sqlite ? BodyIndexWriter.openExisting(init.versionDir, init.indexPath, deps.sqlite, deps.clock) : { reason: "node:sqlite unavailable in the build process" };
   if ("reason" in opened) {
     port.postMessage({ type: "failed", where: "open", message: opened.reason });
@@ -100895,8 +100909,11 @@ function runBuilder(port, init, deps) {
   let seq = 0;
   let timer = null;
   let stopped = false;
+  const heartbeat = setInterval(() => port.postMessage({ type: "alive" }), HEARTBEAT_MS);
+  heartbeat.unref?.();
   const halt = () => {
     stopped = true;
+    clearInterval(heartbeat);
     if (timer) clearTimeout(timer);
     timer = null;
   };
@@ -101003,6 +101020,8 @@ var SLICE_MS = 50;
 var PAUSE_MS = 100;
 var SEARCH_CATCHUP_MS = 50;
 var BUILD_RESTART_MS = 5e3;
+var BUILD_STALL_MS = 6e4;
+var FALLBACK_RETRY_MS = 60 * 6e4;
 function isBodyIndexEnabled(env = process.env) {
   return isTruthyFlag(env[BODY_INDEX_ENV]) && isEnvelopeIndexEnabled(env);
 }
@@ -101124,6 +101143,8 @@ var buildReady = false;
 var buildSeq = 0;
 var buildFailures = 0;
 var buildFallback = null;
+var lastBuildReport = 0;
+var watchdog = null;
 var buildStopped = Promise.resolve();
 var lastWalkDone = 0;
 var walkInFlight = false;
@@ -101267,36 +101288,50 @@ function handToBuild(w, walk, paths) {
   if (walk) walkInFlight = true;
   b.post({ type: "work", seq: ++buildSeq, walk, paths });
 }
+function onMainThread() {
+  return buildFallback !== null && clock.now() - buildFallback.since < FALLBACK_RETRY_MS;
+}
 function startBuild(w) {
   const init = {
     versionDir: w.versionDir,
     indexPath: w.path,
     sliceMs: SLICE_MS,
-    pauseMs: PAUSE_MS
+    pauseMs: PAUSE_MS,
+    protocol: BUILDER_PROTOCOL,
+    schemaVersion: BODY_INDEX_SCHEMA_VERSION
   };
   let handle = null;
   const events = {
     report: (msg) => {
-      if (handle !== null && handle === build) onBuildReport(msg);
+      if (handle === null || handle !== build) return;
+      lastBuildReport = clock.monotonic();
+      onBuildReport(msg);
     },
     exit: (why) => {
       if (handle !== null && handle === build) onBuildExit(why);
     }
   };
   try {
-    handle = (buildFallback ? mainThreadRunner : runner).start(init, events);
+    handle = (onMainThread() ? mainThreadRunner : runner).start(init, events);
   } catch (err) {
     fallBackToMainThread(`build process could not start (${errText4(err)})`);
     handle = mainThreadRunner.start(init, events);
   }
   build = handle;
   buildReady = false;
+  lastBuildReport = clock.monotonic();
+  watchdog ??= setInterval(() => {
+    if (build && clock.monotonic() - lastBuildReport >= BUILD_STALL_MS) onBuildStalled();
+  }, BUILD_STALL_MS / 4);
+  watchdog.unref?.();
   return handle;
 }
 function stopBuild() {
   const b = build;
   build = null;
   buildReady = false;
+  if (watchdog) clearInterval(watchdog);
+  watchdog = null;
   if (walkInFlight) walkRequested = true;
   walkInFlight = false;
   if (b) buildStopped = b.stop();
@@ -101316,10 +101351,14 @@ function onBuildReport(msg) {
       stopBuild();
       wake(0);
       return;
+    case "alive":
+      return;
     case "failed":
-      if (msg.where === "store" && !buildFallback) {
+      if (!onMainThread() && (msg.where === "version" || msg.where === "store" && serverCanReadStore())) {
         stopBuild();
-        fallBackToMainThread(`the build process ${msg.message}`);
+        fallBackToMainThread(
+          msg.where === "store" ? `the build process ${msg.message}` : msg.message
+        );
         wake(0);
         return;
       }
@@ -101331,12 +101370,31 @@ function onBuildReport(msg) {
 function onBuildExit(why) {
   const started = buildReady;
   stopBuild();
-  if (!started && !buildFallback) {
+  if (!started && !onMainThread()) {
     fallBackToMainThread(`build process could not start (${why})`);
     wake(0);
     return;
   }
   buildFailed(`build process stopped unexpectedly (${why})`);
+}
+function onBuildStalled() {
+  const started = buildReady;
+  stopBuild();
+  const why = `the build process stopped responding (nothing for ${BUILD_STALL_MS / 1e3} s), so it was stopped`;
+  if (!started && !onMainThread()) {
+    fallBackToMainThread(why);
+    wake(0);
+    return;
+  }
+  buildFailed(why);
+}
+function serverCanReadStore() {
+  try {
+    readdirSync6(writer.versionDir);
+    return true;
+  } catch {
+    return false;
+  }
 }
 function buildFailed(why) {
   stopBuild();
@@ -101345,8 +101403,8 @@ function buildFailed(why) {
   wake(buildFailures === 1 ? BUILD_RESTART_MS : rescanInterval());
 }
 function fallBackToMainThread(why) {
-  buildFallback = `${why}; building on the main thread`;
-  noteError("index build", buildFallback);
+  buildFallback = { why: `${why}; building on the main thread`, since: clock.now() };
+  noteError("index build", buildFallback.why);
 }
 function wake(delay) {
   if (!running) return;
@@ -101455,9 +101513,9 @@ function bodyIndexStatus() {
     watching: watcher !== null,
     ...writer ? {
       build: {
-        runsOn: buildFallback ? "main thread" : runner.runsOn,
+        runsOn: onMainThread() ? "main thread" : runner.runsOn,
         running: build !== null,
-        ...buildFallback ? { fallback: buildFallback } : {}
+        ...onMainThread() ? { fallback: buildFallback.why } : {}
       }
     } : {},
     ...lastError ? { lastError } : {}
@@ -106122,7 +106180,7 @@ ${this.errorEmit("              ")}
   findSyncedSmartPlist() {
     const base2 = join10(homedir7(), "Library", "Mail");
     try {
-      const versions = readdirSync6(base2).filter((d) => d.startsWith("V"));
+      const versions = readdirSync7(base2).filter((d) => d.startsWith("V"));
       versions.sort().reverse();
       for (const v of versions) {
         const p = join10(base2, v, "MailData", "SyncedSmartMailboxes.plist");

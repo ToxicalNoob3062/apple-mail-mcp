@@ -35,12 +35,19 @@
     `--experimental-sqlite` when the server has it, and a discarded stdout, so
     nothing it prints can reach the MCP stream. It exits when its IPC channel
     closes or when it is orphaned (`ppid` 1), and never holds the writer lock.
-  - **Failures don't stop the index.** A build process that crashes or fails a
-    step is noted in `lastError` and `doctor` and started again after 5 s, then
-    at the walk interval while it keeps failing; a search never waits on it.
-    One that can't start, or can't read the Mail store, is noted once and the
-    build runs on the server's main thread as before. `doctor` reports where the
-    build runs and whether it is running.
+    With no `TMPDIR`, its SQLite connection keeps temporary files in memory
+    rather than in the shared `/var/tmp` (the server's does too).
+  - **Failures don't stop the index.** A build process that crashes, fails a
+    step or stops responding (it reports every 5 s; nothing for 60 s and it is
+    stopped) is noted in `lastError` and `doctor` and started again after 5 s,
+    then at the walk interval while it keeps failing; a search never waits on
+    it. One that can't start, can't read a Mail store the server itself can
+    read, or runs other code than the server (its files were updated on disk
+    while the server ran; the two compare a protocol and schema number) is
+    noted, and the build runs on the server's main thread as before — for an
+    hour, then a build process is tried again. A store the server can't read
+    either is not blamed on the build process. `doctor` reports where the build
+    runs and whether it is running.
   - **Full Disk Access.** The build process is the same Node binary, forked by
     the server, so macOS attributes its file access to the same responsible
     process as the server's — verified on a host-launched server (Claude Desktop
