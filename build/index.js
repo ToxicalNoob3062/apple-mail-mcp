@@ -101078,7 +101078,7 @@ import { fork } from "child_process";
 import { fileURLToPath } from "url";
 
 // src/utils/bodyIndexBuild.ts
-import { readdirSync as readdirSync5 } from "fs";
+import { readdirSync as readdirSync5, statSync as statSync3 } from "fs";
 
 // src/utils/orphan.ts
 function isOrphaned(ppid = process.ppid) {
@@ -101090,6 +101090,17 @@ var BODY_INDEX_BUILDER_ARG = "--body-index-builder";
 var ORPHAN_CHECK_MS = 2e3;
 var HEARTBEAT_MS = 5e3;
 var BUILDER_PROTOCOL = 1;
+function fileIdentity(path3) {
+  try {
+    const st = statSync3(path3);
+    return { dev: st.dev, ino: st.ino, size: st.size, mtimeMs: st.mtimeMs };
+  } catch {
+    return null;
+  }
+}
+function sameFile(a, b) {
+  return b !== null && a.dev === b.dev && a.ino === b.ino && a.size === b.size && a.mtimeMs === b.mtimeMs;
+}
 function errText3(err) {
   return err instanceof Error ? err.message : String(err);
 }
@@ -101204,7 +101215,20 @@ function runBuilderProcess(proc, deps) {
   proc.onMessage((msg) => {
     if (done) return;
     if (msg.type === "start") {
-      loop ??= runBuilder(
+      if (loop) return;
+      if (msg.entry && !sameFile(msg.entry, proc.entry())) {
+        try {
+          proc.send({
+            type: "failed",
+            where: "version",
+            message: "the server's files were replaced on disk after it started (an update), so a build process would run other code than the server"
+          });
+        } catch {
+          quit();
+        }
+        return;
+      }
+      loop = runBuilder(
         {
           postMessage: (m) => {
             try {
@@ -101254,9 +101278,11 @@ var fsEventsWatch = (dir, onEvent, onError) => {
 var STOP_GRACE_MS = 2e3;
 function builderExecArgv(execArgv = process.execArgv, nodeOptions = process.env.NODE_OPTIONS) {
   const flag = "--experimental-sqlite";
-  return execArgv.includes(flag) || (nodeOptions ?? "").split(/\s+/).includes(flag) ? [flag] : [];
+  const sqlite = execArgv.includes(flag) || (nodeOptions ?? "").split(/\s+/).includes(flag) ? [flag] : [];
+  return [...sqlite, "--disable-warning=ExperimentalWarning"];
 }
 function childProcessRunner(entry, opts = {}) {
+  const loaded = fileIdentity(entry);
   return {
     runsOn: "child process",
     start(init, events) {
@@ -101292,7 +101318,7 @@ function childProcessRunner(entry, opts = {}) {
         if (child.connected) child.send(msg, () => {
         });
       };
-      send({ type: "start", init });
+      send({ type: "start", init, entry: loaded });
       return {
         post: (work) => send(work),
         stop: async () => {
@@ -101358,6 +101384,7 @@ var lastError = null;
 var build = null;
 var buildReady = false;
 var buildSeq = 0;
+var buildDoneSeq = 0;
 var buildFailures = 0;
 var buildFallback = null;
 var lastBuildReport = 0;
@@ -101505,8 +101532,11 @@ function handToBuild(w, walk, paths) {
   if (walk) walkInFlight = true;
   b.post({ type: "work", seq: ++buildSeq, walk, paths });
 }
+function forkUnavailable() {
+  return process.versions.electron !== void 0 ? "the server runs on Electron's Node, where a forked process would start the app instead of Node; building on the main thread" : null;
+}
 function onMainThread() {
-  return buildFallback !== null && clock.now() - buildFallback.since < FALLBACK_RETRY_MS;
+  return forkUnavailable() !== null || buildFallback !== null && clock.now() - buildFallback.since < FALLBACK_RETRY_MS;
 }
 function startBuild(w) {
   const init = {
@@ -101549,7 +101579,7 @@ function stopBuild() {
   buildReady = false;
   if (watchdog) clearInterval(watchdog);
   watchdog = null;
-  if (walkInFlight) walkRequested = true;
+  if (walkInFlight || b !== null && buildDoneSeq !== buildSeq) walkRequested = true;
   walkInFlight = false;
   if (b) buildStopped = b.stop();
 }
@@ -101564,6 +101594,7 @@ function onBuildReport(msg) {
       return;
     case "idle":
       if (msg.seq !== buildSeq) return;
+      buildDoneSeq = msg.seq;
       buildFailures = 0;
       stopBuild();
       wake(0);
@@ -101650,12 +101681,22 @@ function tick() {
     wake(WRITER_RETRY_MS);
     return;
   }
+  let failed = false;
   try {
     if (dispatch(w)) return;
   } catch (err) {
     noteError("indexing step failed", err);
+    failed = true;
   }
-  wake(lastWalkDone === 0 ? rescanInterval() : lastWalkDone + rescanInterval() - clock.now());
+  wake(
+    nextTickDelay(
+      lastWalkDone === 0 ? rescanInterval() : lastWalkDone + rescanInterval() - clock.now(),
+      failed
+    )
+  );
+}
+function nextTickDelay(untilWalk, failed) {
+  return Math.max(failed ? BUILD_RESTART_MS : PAUSE_MS, untilWalk);
 }
 function startBackgroundIndexing() {
   if (running) return;
@@ -101685,6 +101726,7 @@ function stopBodyIndexing() {
   walkRequested = false;
   walkInFlight = false;
   buildSeq = 0;
+  buildDoneSeq = 0;
   buildFailures = 0;
   lastWalkDone = 0;
   writer?.close();
@@ -101732,7 +101774,7 @@ function bodyIndexStatus() {
       build: {
         runsOn: onMainThread() ? "main thread" : runner.runsOn,
         running: build !== null,
-        ...onMainThread() ? { fallback: buildFallback.why } : {}
+        ...onMainThread() ? { fallback: forkUnavailable() ?? buildFallback.why } : {}
       }
     } : {},
     ...lastError ? { lastError } : {}
@@ -108954,6 +108996,7 @@ if (process.argv.includes(BODY_INDEX_BUILDER_ARG) && process.send) {
       onMessage: (fn) => process.on("message", fn),
       onDisconnect: (fn) => process.on("disconnect", fn),
       ppid: () => process.ppid,
+      entry: () => fileIdentity(process.argv[1]),
       exit: (code) => process.exit(code)
     },
     { sqlite: loadSqlite2(), clock: realClock }

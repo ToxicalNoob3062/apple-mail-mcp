@@ -397,7 +397,9 @@ on disk. ([#349](https://github.com/sweetrb/apple-mail-mcp/issues/349))
   the server. If that process can't start or can't read the store, the server builds
   on its own main thread instead and `doctor` says why (and tries a build process again
   an hour later). A build process that stops responding for a minute is stopped and
-  restarted. A message file that can't be read or parsed is skipped, counted, and tried
+  restarted. (A host that runs the server on Electron's Node gets the main-thread build:
+  a forked process there would start the app.) A message file that can't be read or
+  parsed is skipped, counted, and tried
   again on the next full check; it never holds up the rest. New mail is picked up through
   file-system events within seconds, with a full check every 10 minutes as a safety
   net. A build of ~22,000 messages took about 40 s on an Apple-silicon Mac.

@@ -68,6 +68,23 @@ regression test.
   does, so the search keeps to its 50 ms.
 - **Body index: until the first walk has finished**, messages it hasn't reached
   are reported as not indexed yet, not as not downloaded.
+- **Body index build process (follow-ups from the review of
+  [#354](https://github.com/sweetrb/apple-mail-mcp/pull/354)).**
+  - File events handed to a build process that stops before reporting them
+    done (a crash, a stall, a failed step) are no longer dropped until the next
+    timed walk: a walk is asked for at once.
+  - After a failed step the background loop waits at least 5 s before trying
+    again; a walk that was due could otherwise retry every millisecond.
+  - On Electron's Node the build runs on the main thread: the build process
+    gets an empty environment, and without `ELECTRON_RUN_AS_NODE` a fork of
+    that binary starts the app.
+  - The start message carries the bundle file's identity (device, inode, size
+    and mtime) as the server loaded it, so a build process started from a
+    bundle an update replaced refuses to run, whatever its version number,
+    and the server builds with its own code instead.
+  - The build process is started with `--disable-warning=ExperimentalWarning`,
+    so Node 22–24 don't print the `node:sqlite` warning into the server's log
+    on every build.
 
 ## [2.20.47] - 2026-10-30
 

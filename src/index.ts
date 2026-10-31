@@ -150,7 +150,7 @@ import {
   reconciliationWarnings,
   type DestructiveOpReport,
 } from "@/services/auditLog.js";
-import { BODY_INDEX_BUILDER_ARG, runBuilderProcess } from "@/utils/bodyIndexBuild.js";
+import { BODY_INDEX_BUILDER_ARG, fileIdentity, runBuilderProcess } from "@/utils/bodyIndexBuild.js";
 import { realClock } from "@/utils/bodyIndex.js";
 import { loadSqlite } from "@/utils/envelopeIndex.js";
 
@@ -165,6 +165,7 @@ if (process.argv.includes(BODY_INDEX_BUILDER_ARG) && process.send) {
       onMessage: (fn) => process.on("message", fn),
       onDisconnect: (fn) => process.on("disconnect", fn),
       ppid: () => process.ppid,
+      entry: () => fileIdentity(process.argv[1]),
       exit: (code) => process.exit(code),
     },
     { sqlite: loadSqlite(), clock: realClock }
