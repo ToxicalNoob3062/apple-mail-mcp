@@ -85,17 +85,30 @@ function asciiWordAt(s: string, at: number, word: string): boolean {
   return true;
 }
 
+/** Where `</tag>` first starts at or after `from` (its letters in any ASCII case, as `/<\/tag>/i`), or -1. */
+function closingTagAt(html: string, tag: string, from: number): number {
+  for (let i = html.indexOf("</", from); i !== -1; i = html.indexOf("</", i + 2)) {
+    if (asciiWordAt(html, i + 2, tag) && html.charCodeAt(i + 2 + tag.length) === 0x3e) return i;
+  }
+  return -1;
+}
+
 /**
  * `html.replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ")`, in linear time.
- * The regex rescans to the end of the input for every opening tag that has no
- * closing one, so a message of unclosed `<style>` tags took hours to strip;
- * here a tag kind known to have no closing tag left is skipped.
+ * The regex rescans the rest of the input from every opening tag, so a message
+ * of unclosed `<style>` tags took hours to strip. Here every scan moves
+ * forward only:
+ *  - the `>` that ends an opening tag is found once and reused while it is
+ *    still ahead, so openers sharing one distant `>` don't each scan to it;
+ *  - once a kind of tag has no closing tag left, its later openers are skipped;
+ *  - a block that is removed is never scanned again.
  */
 function dropScriptsAndStyles(html: string): string {
-  const closers = { script: /<\/script>/gi, style: /<\/style>/gi };
   const noCloseFrom = { script: Infinity, style: Infinity };
   let out = "";
   let kept = 0;
+  // The first `>` at or after the last search start; openers only move forward.
+  let gt = -1;
   let at = html.indexOf("<");
   while (at !== -1) {
     const tag = asciiWordAt(html, at + 1, "script")
@@ -104,15 +117,14 @@ function dropScriptsAndStyles(html: string): string {
         ? "style"
         : null;
     if (tag) {
-      const gt = html.indexOf(">", at + 1 + tag.length);
+      const from = at + 1 + tag.length;
+      if (gt < from) gt = html.indexOf(">", from);
       if (gt === -1) break; // no `>` anywhere after this: no later block either
       if (gt < noCloseFrom[tag]) {
-        const closer = closers[tag];
-        closer.lastIndex = gt + 1;
-        const close = closer.exec(html);
-        if (close) {
+        const close = closingTagAt(html, tag, gt + 1);
+        if (close !== -1) {
           out += html.slice(kept, at) + " ";
-          kept = close.index + close[0].length;
+          kept = close + tag.length + 3; // `</` + tag + `>`
           at = html.indexOf("<", kept);
           continue;
         }

@@ -135,10 +135,16 @@ describe("htmlToText", () => {
       "é",
       "<b",
       "c>",
+      "</",
+      "</scr",
+      "ipt>",
+      "</script",
+      "</sTyLe>",
+      "<script a='>'>",
     ];
     let seed = 7;
     const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
-    for (let i = 0; i < 5000; i++) {
+    for (let i = 0; i < 10_000; i++) {
       let html = "";
       for (let n = Math.floor(rnd() * 40); n > 0; n--)
         html += pieces[Math.floor(rnd() * pieces.length)];
@@ -146,18 +152,51 @@ describe("htmlToText", () => {
     }
   });
 
-  it("takes linear time on input built to make the regexes rescan", () => {
-    const hostile = [
-      "<".repeat(200_000), // no `>` after any `<`
-      "<style>".repeat(100_000), // opening tags that never close
-      "<script".repeat(100_000), // and never even end
-      "<style>x</style>".repeat(50_000) + "<style>".repeat(50_000),
-    ];
-    const t0 = performance.now();
-    for (const html of hostile) htmlToText(html);
-    // The regex version took 1.6 s for 20,000 `<script`s, growing with the square.
-    expect(performance.now() - t0).toBeLessThan(2_000);
+  /** Input built to make a scan restart from every tag: each grows with the square if one does. */
+  const hostile = (n: number) => [
+    "<".repeat(n), // no `>` after any `<`
+    "<style>".repeat(n), // opening tags that never close
+    "<script".repeat(n), // and never even end
+    "<style".repeat(n) + ">", // openers sharing one distant `>`
+    "<script".repeat(n) + ">",
+    "<style>x</style>".repeat(n) + "<style>".repeat(n),
+    "<script>x</style>".repeat(n), // closing tags of the other kind
+    "<style>" + "</".repeat(n), // closing tags that never complete
+    "<script>" + "</scrip".repeat(n),
+  ];
+
+  /** Characters String.prototype.indexOf looked at while `fn` ran: the scans' total work. */
+  function indexOfWork(fn: () => void): number {
+    const real = String.prototype.indexOf;
+    let work = 0;
+    String.prototype.indexOf = function (this: string, search: string, position?: number) {
+      const start = Math.min(Math.max(Math.trunc(position ?? 0), 0), this.length);
+      const found = real.call(this, search, position);
+      work += (found === -1 ? this.length : found + search.length) - start;
+      return found;
+    };
+    try {
+      fn();
+    } finally {
+      String.prototype.indexOf = real;
+    }
+    return work;
+  }
+
+  it("scans each character a bounded number of times, whatever the tags", () => {
+    // At 20,000 repeats a scan that restarts per tag looks at over 10^9 characters.
+    for (const html of hostile(20_000)) {
+      expect(indexOfWork(() => htmlToText(html))).toBeLessThanOrEqual(8 * html.length);
+    }
     expect(htmlToText("<style>".repeat(3) + "<p>kept</p>")).toBe("kept");
+    expect(htmlToText("<style".repeat(3) + "><p>kept</p></style>after")).toBe("after");
+  });
+
+  it("strips the review's hostile input at full size well within a generous bound", () => {
+    // Linear, these take tens of milliseconds; the regex version took hours.
+    const t0 = performance.now();
+    for (const html of hostile(100_000)) htmlToText(html);
+    expect(performance.now() - t0).toBeLessThan(15_000);
   });
 });
 

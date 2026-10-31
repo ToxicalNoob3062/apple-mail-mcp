@@ -152,13 +152,18 @@ const WORD_CHAR = /[\p{L}\p{N}\p{Co}]/u;
 const UNSPACED_SCRIPT =
   /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
 
+/** A character a word can end in: letter, digit, private use, or a combining mark on one. */
+const WORD_END = /[\p{L}\p{N}\p{Co}\p{M}]$/u;
+
 /**
  * The FTS5 query for a body search, or why the index can't answer it as a
  * "contains" search would. The text is one phrase (its operators literal)
- * whose last word matches as a prefix, so `invoice` finds `invoices` and a
- * Korean word finds itself with a particle attached. The index matches words,
- * so text with no letters or digits, and text in a script written without
- * spaces, is refused rather than answered with a false empty.
+ * whose last word matches as a prefix when the text ends inside it, so
+ * `invoice` finds `invoices` and a Korean word finds itself with a particle
+ * attached, while `invoice ` or `invoice-` (the word complete) don't find
+ * `invoices`. The index matches words, so text with no letters or digits, and
+ * text in a script written without spaces, is refused rather than answered
+ * with a false empty.
  */
 export function bodyMatchQuery(text: string): { query: string } | { reason: string } {
   if (text.includes("\0")) return { reason: "the body text contains a NUL character" };
@@ -171,7 +176,7 @@ export function bodyMatchQuery(text: string): { query: string } | { reason: stri
         "the body index matches words, and Chinese, Japanese, Thai, Lao, Khmer and Burmese text has no spaces to split it into words",
     };
   }
-  return { query: `${ftsPhrase(text)}*` };
+  return { query: WORD_END.test(text) ? `${ftsPhrase(text)}*` : ftsPhrase(text) };
 }
 
 // ---------------------------------------------------------------------------
@@ -655,7 +660,17 @@ export class BodyIndexWriter {
         PRAGMA journal_mode = WAL;
         PRAGMA application_id = ${BODY_INDEX_APPLICATION_ID};
         ${SCHEMA_SQL}
+      `);
+      // A v3 index (2.20.46) marked a message it couldn't read as indexed with
+      // no body: searched, no match. Upgrading, every indexed message without
+      // a body is read again (one that truly has no text comes back the same),
+      // in the transaction that stamps v4, so the upgrade can't half happen.
+      const upgrading = what === "ours" && version === UPGRADE_IN_PLACE_FROM;
+      db.exec(`
+        BEGIN IMMEDIATE;
+        ${upgrading ? `UPDATE docs SET state = ${DocState.queued} WHERE state = ${DocState.indexed} AND id NOT IN (SELECT rowid FROM bodies);` : ""}
         PRAGMA user_version = ${BODY_INDEX_SCHEMA_VERSION};
+        COMMIT;
       `);
       privateSidecars(path);
       const w = new BodyIndexWriter(versionDir, path, db, rebuilt, clock);

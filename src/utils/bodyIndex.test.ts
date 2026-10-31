@@ -711,6 +711,13 @@ describe("bodyMatchQuery", () => {
   it("quotes the text as one phrase whose last word matches as a prefix", () => {
     expect(bodyMatchQuery("wire transfer")).toEqual({ query: '"wire transfer"*' });
     expect(bodyMatchQuery('say "hi" NEAR')).toEqual({ query: '"say ""hi"" NEAR"*' });
+    expect(bodyMatchQuery("cafe\u0301")).toEqual({ query: '"cafe\u0301"*' }); // ends in a mark
+  });
+
+  it("leaves the prefix off when the text ends after its last word", () => {
+    for (const text of ["foo ", "foo-", "foo.", 'say "hi"']) {
+      expect(bodyMatchQuery(text)).toEqual({ query: `"${text.replace(/"/g, '""')}"` });
+    }
   });
 
   it("refuses text the index can't answer as a 'contains' search would", () => {
@@ -776,6 +783,7 @@ describeIfSqlite("body search: what a 'contains' search finds, or an honest refu
 
   it("finds a word with an ending added, as 'contains' does", () => {
     expect(find("invoice")).toEqual([1]);
+    expect(find("invoice ")).toEqual([]); // the word is complete: not "invoices"
     expect(find("attached for mar")).toEqual([1]);
     expect(find("회의")).toEqual([2]);
     expect(find("b.com")).toEqual([4]);
@@ -905,5 +913,28 @@ describeIfSqlite("BodyIndexWriter: a bad file stops nothing, and isn't counted a
     );
     expect(w.state().counts.indexed).toBe(2);
     expect(bodies("tracking")).toEqual([1]);
+  });
+
+  it("upgrading from v3, reads again what 2.20.46 marked indexed without reading it", () => {
+    writeEmlx(store, "ACC", "INBOX", 3, plainMessage("c", "")); // no text at all
+    buildAll(w);
+    // What 2.20.46 did with a file it couldn't open: indexed, no body.
+    w.db.prepare("DELETE FROM bodies WHERE rowid = 2").run();
+    expect(stateOf(2)).toBe(DocState.indexed);
+    w.db.exec("PRAGMA user_version = 3");
+    w.close();
+    w = openWriter(store, path);
+    expect(w.rebuilt).toBeNull();
+    expect(stateOf(2)).toBe(DocState.queued); // no longer a silent "no match"
+    expect(stateOf(3)).toBe(DocState.queued);
+    expect(stateOf(1)).toBe(DocState.indexed); // has its body: left alone
+    while (w.indexStep(60_000) > 0);
+    expect(bodies("lunch")).toEqual([2]);
+    expect(stateOf(3)).toBe(DocState.indexed); // truly empty: the same as before
+    // A current index is never requeued on open.
+    w.db.prepare("DELETE FROM bodies WHERE rowid = 2").run();
+    w.close();
+    w = openWriter(store, path);
+    expect(stateOf(2)).toBe(DocState.indexed);
   });
 });

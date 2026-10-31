@@ -166,10 +166,9 @@ describe("likePattern", () => {
 
 describe("needsUnicodeCaseFold", () => {
   it("is true only for a letter outside ASCII that has case forms", () => {
-    for (const t of ["über", "CAFÉ", "Ελλάδα", "Привет"])
+    for (const t of ["über", "CAFÉ", "Ελλάδα", "Привет", "ß2", "İ"])
       expect(needsUnicodeCaseFold(t)).toBe(true);
-    for (const t of ["Invoice 100%", "明天", "🎉", "ß2", ""])
-      expect(needsUnicodeCaseFold(t)).toBe(false);
+    for (const t of ["Invoice 100%", "明天", "🎉", ""]) expect(needsUnicodeCaseFold(t)).toBe(false);
   });
 });
 
@@ -177,7 +176,7 @@ describe("containsGlob", () => {
   it("turns every cased character into a class of its case forms", () => {
     expect(containsGlob("Ab1")).toBe("*[Aa][bB]1*");
     expect(containsGlob("ü")).toBe("*[üÜ]*");
-    expect(containsGlob("Σ")).toBe("*[Σσ]*");
+    expect(containsGlob("Σ")).toBe("*[Σςσ]*");
   });
 
   it("matches GLOB's own wildcards literally and leaves LIKE's alone", () => {
@@ -185,8 +184,16 @@ describe("containsGlob", () => {
     expect(containsGlob("100%_")).toBe("*100%_*");
   });
 
-  it("keeps a character whose other case is two characters as it is", () => {
-    expect(containsGlob("ß")).toBe("*ß*");
+  it("pairs every case form of a letter, not only one upper and one lower", () => {
+    expect(containsGlob("ß")).toBe("*[ßẞ]*"); // its upper case is "SS", yet ẞ lowers to it
+    expect(containsGlob("ς")).toBe("*[ςΣσ]*"); // final sigma
+    expect(containsGlob("İ")).toBe("*[İIiı]*"); // lowers to i + a combining dot
+    expect(containsGlob("ǅ")).toBe("*[ǅǄǆ]*"); // a titlecase digraph
+    expect(containsGlob("\u{10400}")).toBe("*[\u{10400}\u{10428}]*"); // Deseret, past the BMP
+  });
+
+  it("pairs an ASCII letter with its other ASCII case only, as LIKE does", () => {
+    expect(containsGlob("ks")).toBe("*[kK][sS]*"); // not the Kelvin sign or long s
   });
 });
 
@@ -442,6 +449,9 @@ describeIfSqlite("searchOpenIndex: text the index must match like AppleScript do
       { ...base, id: 3, subject: "ΕΛΛΗΝΙΚΆ νέα", received: T0 - 2 },
       { ...base, id: 4, subject: "[URGENT] *action* needed?", received: T0 - 3 },
       { ...base, id: 5, subject: "axb", mailbox: NFD_MAILBOX, received: T0 - 4 },
+      { ...base, id: 6, subject: "GROẞE STRAẞE", received: T0 - 5 },
+      { ...base, id: 7, subject: "ΟΔΟΣ ΑΘΗΝΩΝ", received: T0 - 6 },
+      { ...base, id: 8, subject: "istanbul trip", received: T0 - 7 },
     ]);
     db = new sqlite!.DatabaseSync(path, { readOnly: true });
     features = checkSchema(db) as SchemaFeatures;
@@ -458,6 +468,12 @@ describeIfSqlite("searchOpenIndex: text the index must match like AppleScript do
     expect(ids({ subject: "ελληνικά" })).toEqual([3]);
     expect(ids({ from: "josé garcía" })).toEqual([2]);
     expect(ids({ query: "projekt" })).toEqual([1]);
+  });
+
+  it("matches letters whose case forms aren't one upper and one lower", () => {
+    expect(ids({ subject: "straße" })).toEqual([6]);
+    expect(ids({ subject: "οδος" })).toEqual([7]); // final sigma against Σ
+    expect(ids({ subject: "İstanbul" })).toEqual([8]);
   });
 
   it("takes GLOB wildcards in user text literally, on the GLOB path too", () => {
@@ -562,6 +578,18 @@ describeIfSqlite("searchEnvelopeIndex", () => {
     } finally {
       writer.exec(`ROLLBACK`);
       writer.close();
+    }
+  });
+
+  it("falls back on text too long for a SQLite pattern instead of failing or matching nothing", () => {
+    const path = join(dir, "long-pattern");
+    buildEnvelopeIndex(path, MESSAGES);
+    // SQLite refuses LIKE/GLOB patterns over 50,000 bytes; a class per letter grows fast.
+    for (const subject of ["ü".repeat(10_000), "a".repeat(60_000)]) {
+      expect(searchEnvelopeIndex(params({ subject }), { indexPath: path })).toEqual({
+        ok: false,
+        reason: expect.stringContaining("pattern too complex"),
+      });
     }
   });
 

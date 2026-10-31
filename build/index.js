@@ -99902,24 +99902,29 @@ function asciiWordAt(s, at, word) {
   }
   return true;
 }
+function closingTagAt(html, tag, from) {
+  for (let i = html.indexOf("</", from); i !== -1; i = html.indexOf("</", i + 2)) {
+    if (asciiWordAt(html, i + 2, tag) && html.charCodeAt(i + 2 + tag.length) === 62) return i;
+  }
+  return -1;
+}
 function dropScriptsAndStyles(html) {
-  const closers = { script: /<\/script>/gi, style: /<\/style>/gi };
   const noCloseFrom = { script: Infinity, style: Infinity };
   let out = "";
   let kept = 0;
+  let gt = -1;
   let at = html.indexOf("<");
   while (at !== -1) {
     const tag = asciiWordAt(html, at + 1, "script") ? "script" : asciiWordAt(html, at + 1, "style") ? "style" : null;
     if (tag) {
-      const gt = html.indexOf(">", at + 1 + tag.length);
+      const from = at + 1 + tag.length;
+      if (gt < from) gt = html.indexOf(">", from);
       if (gt === -1) break;
       if (gt < noCloseFrom[tag]) {
-        const closer = closers[tag];
-        closer.lastIndex = gt + 1;
-        const close = closer.exec(html);
-        if (close) {
+        const close = closingTagAt(html, tag, gt + 1);
+        if (close !== -1) {
           out += html.slice(kept, at) + " ";
-          kept = close.index + close[0].length;
+          kept = close + tag.length + 3;
           at = html.indexOf("<", kept);
           continue;
         }
@@ -100024,6 +100029,7 @@ function ftsPhrase(text) {
 }
 var WORD_CHAR = /[\p{L}\p{N}\p{Co}]/u;
 var UNSPACED_SCRIPT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
+var WORD_END = /[\p{L}\p{N}\p{Co}\p{M}]$/u;
 function bodyMatchQuery(text) {
   if (text.includes("\0")) return { reason: "the body text contains a NUL character" };
   if (!WORD_CHAR.test(text)) {
@@ -100034,7 +100040,7 @@ function bodyMatchQuery(text) {
       reason: "the body index matches words, and Chinese, Japanese, Thai, Lao, Khmer and Burmese text has no spaces to split it into words"
     };
   }
-  return { query: `${ftsPhrase(text)}*` };
+  return { query: WORD_END.test(text) ? `${ftsPhrase(text)}*` : ftsPhrase(text) };
 }
 var fts5Checked = null;
 function fts5Unsupported(sqlite) {
@@ -100328,7 +100334,13 @@ var BodyIndexWriter = class _BodyIndexWriter {
         PRAGMA journal_mode = WAL;
         PRAGMA application_id = ${BODY_INDEX_APPLICATION_ID};
         ${SCHEMA_SQL}
+      `);
+      const upgrading = what === "ours" && version4 === UPGRADE_IN_PLACE_FROM;
+      db.exec(`
+        BEGIN IMMEDIATE;
+        ${upgrading ? `UPDATE docs SET state = ${DocState.queued} WHERE state = ${DocState.indexed} AND id NOT IN (SELECT rowid FROM bodies);` : ""}
         PRAGMA user_version = ${BODY_INDEX_SCHEMA_VERSION};
+        COMMIT;
       `);
       privateSidecars(path3);
       const w = new _BodyIndexWriter(versionDir, path3, db, rebuilt, clock2);
@@ -100688,25 +100700,50 @@ function checkSchema(db) {
 function likePattern(text) {
   return `%${text.toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 }
-function caseForms(ch) {
-  const forms = /* @__PURE__ */ new Set();
-  const lower = ch.toLowerCase();
+function foldKey(ch) {
+  if (ch === "\u0130") return "i";
   const upper = ch.toUpperCase();
-  for (const form of [ch, lower, upper, lower.toUpperCase(), upper.toLowerCase()]) {
-    if ([...form].length === 1) forms.add(form);
+  const lower = ([...upper].length === 1 ? upper : ch).toLowerCase();
+  return [...lower].length === 1 ? lower : ch;
+}
+var caseClasses = null;
+function buildCaseClasses() {
+  const byKey = /* @__PURE__ */ new Map();
+  for (let cp = 0; cp <= 131071; cp++) {
+    if (cp >= 55296 && cp <= 57343) continue;
+    const c = String.fromCodePoint(cp);
+    if (c.toUpperCase() === c && c.toLowerCase() === c) continue;
+    const key = foldKey(c);
+    const members2 = byKey.get(key);
+    if (members2) members2.push(c);
+    else byKey.set(key, [c]);
   }
-  return [...forms];
+  const classes = /* @__PURE__ */ new Map();
+  for (const [key, members2] of byKey) {
+    if (!members2.includes(key)) members2.push(key);
+    if (members2.length > 1) for (const m of members2) classes.set(m, members2);
+  }
+  return classes;
+}
+function caseClass(ch) {
+  if (ch.charCodeAt(0) < 128) {
+    const other = ch === ch.toLowerCase() ? ch.toUpperCase() : ch.toLowerCase();
+    return other === ch ? [ch] : [ch, other];
+  }
+  caseClasses ??= buildCaseClasses();
+  const members2 = caseClasses.get(ch);
+  return members2 ? [ch, ...members2.filter((m) => m !== ch)] : [ch];
 }
 function needsUnicodeCaseFold(text) {
   for (const ch of text) {
-    if (ch.charCodeAt(0) > 127 && caseForms(ch).length > 1) return true;
+    if (ch.charCodeAt(0) >= 128 && caseClass(ch).length > 1) return true;
   }
   return false;
 }
 function containsGlob(text) {
   let pattern = "*";
   for (const ch of text) {
-    const forms = caseForms(ch);
+    const forms = caseClass(ch);
     if (forms.length > 1) pattern += `[${forms.join("")}]`;
     else pattern += ch === "*" || ch === "?" || ch === "[" ? `[${ch}]` : ch;
   }

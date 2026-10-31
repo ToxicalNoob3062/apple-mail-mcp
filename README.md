@@ -356,8 +356,10 @@ read-only. Text filters ignore case the way Mail does, accented and non-Latin le
 included (`über` finds `Über`). Anything the index can't answer completely (a
 `flagColor` filter, an unknown mailbox, no Full Disk Access, an unrecognised schema, a
 corrupt or locked database, or Mail not running — opening the index then would create
-files in the mail store) falls back to the AppleScript scan. The `backend` field below
-reports which one answered.
+files in the mail store) falls back to the AppleScript scan. (Mail not running is judged
+by its `-wal`/`-shm` files being gone; after a Mail crash leaves them behind, a search can
+still update `-shm`, which SQLite rebuilds when Mail next opens the index.) The `backend`
+field below reports which one answered.
 ([#342](https://github.com/sweetrb/apple-mail-mcp/issues/342))
 
 **Body search for AppleScript-only accounts (opt-in local body index).** Without IMAP,

@@ -265,21 +265,62 @@ export function likePattern(text: string): string {
   return `%${text.toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 }
 
-/** `ch` and its one-character case forms (`ü` → `ü`, `Ü`; `ß` → `ß`, its upper case being two). */
-function caseForms(ch: string): string[] {
-  const forms = new Set<string>();
-  const lower = ch.toLowerCase();
+/**
+ * The key every case form of a letter shares: its upper case's lower case, so
+ * `ẞ` and `ß` share `ß`, and `Σ`, `σ` and `ς` share `σ`. `İ` lowers to `i` plus
+ * a combining dot, which no one-character class can hold; it keys as `i`, as
+ * Turkish pairs them.
+ */
+function foldKey(ch: string): string {
+  if (ch === "\u0130") return "i";
   const upper = ch.toUpperCase();
-  for (const form of [ch, lower, upper, lower.toUpperCase(), upper.toLowerCase()]) {
-    if ([...form].length === 1) forms.add(form);
+  const lower = ([...upper].length === 1 ? upper : ch).toLowerCase();
+  return [...lower].length === 1 ? lower : ch;
+}
+
+/** Each cased character outside ASCII → every character with its fold key. Built once, on first use. */
+let caseClasses: Map<string, string[]> | null = null;
+
+function buildCaseClasses(): Map<string, string[]> {
+  const byKey = new Map<string, string[]>();
+  // The Basic and Supplementary Multilingual Planes hold every cased letter.
+  for (let cp = 0; cp <= 0x1ffff; cp++) {
+    if (cp >= 0xd800 && cp <= 0xdfff) continue; // lone surrogates
+    const c = String.fromCodePoint(cp);
+    if (c.toUpperCase() === c && c.toLowerCase() === c) continue; // no case
+    const key = foldKey(c);
+    const members = byKey.get(key);
+    if (members) members.push(c);
+    else byKey.set(key, [c]);
   }
-  return [...forms];
+  const classes = new Map<string, string[]>();
+  for (const [key, members] of byKey) {
+    if (!members.includes(key)) members.push(key);
+    if (members.length > 1) for (const m of members) classes.set(m, members);
+  }
+  return classes;
+}
+
+/**
+ * `ch` and every other character that is the same letter in another case
+ * (`ü`, `Ü`; `ß`, `ẞ`; `ς`, `σ`, `Σ`). An ASCII letter pairs with its other
+ * ASCII case only, as SQLite's `LIKE` does, so a letter matches the same way
+ * whether or not the rest of the text needs a class.
+ */
+function caseClass(ch: string): string[] {
+  if (ch.charCodeAt(0) < 0x80) {
+    const other = ch === ch.toLowerCase() ? ch.toUpperCase() : ch.toLowerCase();
+    return other === ch ? [ch] : [ch, other];
+  }
+  caseClasses ??= buildCaseClasses();
+  const members = caseClasses.get(ch);
+  return members ? [ch, ...members.filter((m) => m !== ch)] : [ch];
 }
 
 /** Whether `text` has a letter outside ASCII with another case form, which SQLite's `LIKE` can't fold. */
 export function needsUnicodeCaseFold(text: string): boolean {
   for (const ch of text) {
-    if (ch.charCodeAt(0) > 0x7f && caseForms(ch).length > 1) return true;
+    if (ch.charCodeAt(0) >= 0x80 && caseClass(ch).length > 1) return true;
   }
   return false;
 }
@@ -293,7 +334,7 @@ export function needsUnicodeCaseFold(text: string): boolean {
 export function containsGlob(text: string): string {
   let pattern = "*";
   for (const ch of text) {
-    const forms = caseForms(ch);
+    const forms = caseClass(ch);
     if (forms.length > 1) pattern += `[${forms.join("")}]`;
     else pattern += ch === "*" || ch === "?" || ch === "[" ? `[${ch}]` : ch;
   }
@@ -512,6 +553,10 @@ export function searchOpenIndex(
  * keeps them while it runs; when it has quit and they are gone, the index is
  * left alone and AppleScript answers instead (which starts Mail). Judged from
  * the file header (bytes 18–19 are 2 in WAL mode), read without SQLite.
+ *
+ * It sees whether the files exist, not whether Mail holds them: after a Mail
+ * crash leaves them behind, a read can still update `-shm`, the shared-memory
+ * index SQLite rebuilds from the `-wal` when Mail next opens the database.
  */
 export function envelopeIndexClosed(indexPath: string): string | null {
   let fd: number | undefined;
