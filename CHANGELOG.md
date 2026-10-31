@@ -1,5 +1,68 @@
 ## [Unreleased]
 
+## [2.20.48] - 2026-10-31
+
+### Fixed
+
+Fixes to the opt-in Envelope Index
+([#345](https://github.com/sweetrb/apple-mail-mcp/pull/345)) and body index
+([#353](https://github.com/sweetrb/apple-mail-mcp/pull/353)), found by
+attacking them with hostile input and permission failures. Each has a
+regression test.
+
+- **Envelope Index search ignores case outside ASCII.** SQLite's `lower()` and
+  `LIKE` fold ASCII letters only, so a `query`, `subject` or `from` of `über`
+  missed `Über`, and `café` missed `CAFÉ`, where AppleScript finds them (on
+  the test store, `é` now finds 143 subjects instead of 140). Text with such a
+  letter is matched through a GLOB pattern with a class of case forms per
+  letter (`[Üü]`, GLOB's own `*`, `?` and `[` taken literally); other text keeps
+  `LIKE`, which is about twice as fast. A filter with a NUL character, or a date
+  that doesn't parse, falls back to AppleScript instead of matching nothing.
+- **Envelope Index: no files are created in the mail store.** A read-only
+  SQLite connection to a WAL database creates its `-wal` and `-shm` files when
+  they are missing, as they are after Mail quits; the search and `get-message`
+  disk read would have created them in `~/Library/Mail/V10/MailData`. When Mail
+  has the index closed, they now fall back to AppleScript, which starts Mail.
+- **Envelope Index: mailbox names match across Unicode normalization**, as the
+  AppleScript resolver does since #253 (`Büro` finds a mailbox stored as NFD).
+- **`get-message` from the store doesn't return an empty body.** A message
+  Mail has downloaded only the headers of (4,710 `.partial.emlx` files on the
+  test store, 10 with no body text) is read through AppleScript, which downloads
+  it. A blank `text/plain` part no longer hides the HTML body, there and in the
+  body index.
+- **HTML-to-text runs in linear time.** Its regexes rescanned to the end of the
+  input for every `<` without a `>` and every unclosed `<style>`/`<script>`:
+  20,000 `<script`s took 1.6 s and it grows with the square, so one hostile
+  spam message could hold the body index build, which runs on the server's main
+  thread, for hours. The output is unchanged: a test checks it against the old
+  regexes on 5,000 random tag-soup inputs.
+- **Body search finds what a "contains" search finds wherever a word begins.**
+  The last word of the text matches as a prefix (`invoice` finds `invoices`; a
+  Korean word finds itself with a particle attached). Text the word index can't
+  match faithfully — no letters or digits (`@`), or Chinese, Japanese, Thai,
+  Lao, Khmer or Burmese, written without spaces between words — reports the
+  account as not searched, with the reason, instead of as no match.
+- **Body index: one bad file stops nothing and isn't counted as searched.** A
+  message file that can't be read (no permission, an I/O error) or that makes
+  the parser throw was marked indexed (searched, no match) or failed the whole
+  batch, every retry. It is now recorded as unreadable — counted in a search's
+  coverage (`3 that couldn't be read`) and in `doctor`, with the error code in
+  `lastError` — and read again on the next full walk. A file that vanished
+  before it was read drops its row. The index layout is now v4 (that new state);
+  a v3 index from 2.20.46 is upgraded in place, without a rebuild, and a 2.20.46
+  instance reports a v4 index as being rebuilt rather than miscounting it.
+- **Body index: only Mail's message files are indexed.** An attachment saved
+  as `…/Attachments/…/123.emlx` was indexed as message 123; only files in a
+  `Messages` folder count now.
+- **Body index: a search no longer swallows the file watcher's wake-up.** A
+  search takes the queued file events, which cancelled the background pass they
+  had scheduled: a walk they asked for, or files its 50 ms catch-up didn't get
+  to, waited for the next timed walk (up to 10 minutes). The loop now picks
+  them up at once. The catch-up itself never parses a file over 1 MB, so the
+  search keeps to its 50 ms.
+- **Body index: until the first walk has finished**, messages it hasn't reached
+  are reported as not indexed yet, not as not downloaded.
+
 ## [2.20.46] - 2026-10-30
 
 ### Added

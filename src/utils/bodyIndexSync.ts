@@ -73,6 +73,8 @@ export const SLICE_MS = 50;
 export const PAUSE_MS = 100;
 /** Most indexing a search does before answering (queued file events only, in practice). */
 export const SEARCH_CATCHUP_MS = 50;
+/** A search's catch-up leaves files larger than this to the background loop, so it never waits on a big parse. */
+export const SEARCH_CATCHUP_MAX_BYTES = 1024 * 1024;
 
 /** Whether body search via the local index is switched on. */
 export function isBodyIndexEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -385,7 +387,12 @@ export function prepareBodySearch(): { ok: true; file: string } | { ok: false; r
   if (w) {
     try {
       flushChanges(w);
-      if (!w.walking && w.hasQueued()) w.indexStep(SEARCH_CATCHUP_MS);
+      if (!w.walking && w.hasQueued()) {
+        w.indexStep(SEARCH_CATCHUP_MS, { maxBytes: SEARCH_CATCHUP_MAX_BYTES });
+      }
+      // Taking the watcher's events cancelled the wake-up they had scheduled:
+      // hand what is left (a walk, the rest of the queue) to the loop now.
+      if (w.walking || w.hasQueued()) wake(0);
     } catch (err) {
       noteError("search catch-up failed", err);
     }

@@ -9,6 +9,7 @@ import { spawn } from "child_process";
 import { join } from "path";
 import {
   PAUSE_MS,
+  SEARCH_CATCHUP_MAX_BYTES,
   SEARCH_CATCHUP_MS,
   SLICE_MS,
   WATCH_DEBOUNCE_MS,
@@ -359,6 +360,32 @@ describeIfSqlite("keeping the index current", () => {
     expect(SLICE_MS).toBeLessThanOrEqual(50);
   });
 
+  it("a search's catch-up leaves a big new file to the background loop, and says it isn't indexed yet", () => {
+    const fake = started();
+    const big = writeEmlx(
+      v10,
+      "ACC",
+      "INBOX",
+      2,
+      plainMessage("b", `harbour ${"x".repeat(SEARCH_CATCHUP_MAX_BYTES)}`)
+    );
+    const small = writeEmlx(v10, "ACC", "INBOX", 3, plainMessage("c", "harbour small"));
+    fake.state.onEvent!("rename", rel(big));
+    fake.state.onEvent!("rename", rel(small));
+    expect(find("harbour")).toEqual({ ids: [3, 1], partial: true });
+    runToIdle();
+    expect(find("harbour")).toEqual({ ids: [3, 2, 1], partial: false });
+  });
+
+  it("a search that takes a requested walk leaves it to the loop, which runs it at once", () => {
+    const fake = started();
+    writeEmlx(v10, "ACC", "INBOX", 2, plainMessage("b", "dentist appointment"));
+    fake.state.onEvent!("rename", null); // FSEvents couldn't name the file
+    expect(find("dentist")).toMatchObject({ ids: [] }); // the walk hasn't run yet
+    runToIdle(); // seconds, not the 10-minute timed walk
+    expect(find("dentist")).toEqual({ ids: [2], partial: false });
+  });
+
   it("makes a new message searchable from its file event, on the next search", () => {
     const fake = started();
     const added = writeEmlx(v10, "ACC", "INBOX", 2, plainMessage("b", "dentist appointment"));
@@ -464,7 +491,7 @@ describeIfSqlite("keeping the index current", () => {
       path: indexFile,
       role: "writer",
       watching: true,
-      counts: { indexed: 1, queued: 0, partial: 0, tooLarge: 0 },
+      counts: { indexed: 1, queued: 0, partial: 0, tooLarge: 0, unreadable: 0 },
       meta: { lastWalkFiles: 1, lastFullWalk: expect.any(String) },
     });
   });

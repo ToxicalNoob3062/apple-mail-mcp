@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { dataSubdirs, emlxCandidates, emlxSource, htmlToText } from "@/utils/emlx.js";
+import { dataSubdirs, emlxCandidates, emlxSource, htmlToText, messageText } from "@/utils/emlx.js";
 import { emlx, plainMessage, writeEmlx } from "@/utils/envelopeIndex.testFixture.js";
 
 describe("dataSubdirs", () => {
@@ -87,5 +87,98 @@ describe("htmlToText", () => {
 
   it("decodes each entity once (no double-unescape of &amp;lt;)", () => {
     expect(htmlToText("<p>&amp;lt;b&amp;gt; &amp;amp;</p>")).toBe("&lt;b&gt; &amp;");
+  });
+
+  /** The regex version htmlToText replaced; quadratic on hostile input, so only fed small strings. */
+  const regexVersion = (html: string) =>
+    html
+      .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ")
+      .replace(/<br\s*\/?>|<\/(p|div|tr|li|h[1-6])>/gi, "\n")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
+      .replace(/&amp;/gi, "&")
+      .replace(/[ \t]+/g, " ")
+      .replace(/\n\s*\n+/g, "\n\n")
+      .trim();
+
+  it("gives exactly what the regex version gave, on random tag soup", () => {
+    const pieces = [
+      "<",
+      ">",
+      "<>",
+      "<p>",
+      "</p>",
+      "<br/>",
+      "<STYLE a=1>",
+      "</style>",
+      "</STYLE>",
+      "<script>",
+      "</Script>",
+      "<scripts>",
+      "<stylesheet>",
+      "</style >",
+      "<sty",
+      "le>",
+      "x",
+      " ",
+      "\n",
+      "\t",
+      "&amp;",
+      "&lt;",
+      "ſcript",
+      "<ſtyle>",
+      "K",
+      "é",
+      "<b",
+      "c>",
+    ];
+    let seed = 7;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+    for (let i = 0; i < 5000; i++) {
+      let html = "";
+      for (let n = Math.floor(rnd() * 40); n > 0; n--)
+        html += pieces[Math.floor(rnd() * pieces.length)];
+      expect(htmlToText(html)).toBe(regexVersion(html));
+    }
+  });
+
+  it("takes linear time on input built to make the regexes rescan", () => {
+    const hostile = [
+      "<".repeat(200_000), // no `>` after any `<`
+      "<style>".repeat(100_000), // opening tags that never close
+      "<script".repeat(100_000), // and never even end
+      "<style>x</style>".repeat(50_000) + "<style>".repeat(50_000),
+    ];
+    const t0 = performance.now();
+    for (const html of hostile) htmlToText(html);
+    // The regex version took 1.6 s for 20,000 `<script`s, growing with the square.
+    expect(performance.now() - t0).toBeLessThan(2_000);
+    expect(htmlToText("<style>".repeat(3) + "<p>kept</p>")).toBe("kept");
+  });
+});
+
+describe("messageText", () => {
+  const multipart = (plain: string, html: string) =>
+    'Content-Type: multipart/alternative; boundary="b"\r\n\r\n' +
+    `--b\r\nContent-Type: text/plain\r\n\r\n${plain}\r\n` +
+    `--b\r\nContent-Type: text/html\r\n\r\n${html}\r\n--b--\r\n`;
+
+  it("prefers the plain part", () => {
+    expect(messageText(multipart("plain words", "<p>html words</p>"))).toBe("plain words");
+  });
+
+  it("reads the HTML part when the plain part is missing or blank", () => {
+    expect(messageText(multipart(" \r\n\t", "<p>html words</p>"))).toBe("html words");
+    expect(messageText("Content-Type: text/html\r\n\r\n<b>only html</b>")).toBe("only html");
+  });
+
+  it("uses an HTML part the caller already has, and keeps a blank plain part when there is no HTML", () => {
+    expect(messageText(multipart(" ", "<p>x</p>"), "<p>given</p>")).toBe("given");
+    expect(messageText("Content-Type: text/plain\r\n\r\n  ")).toBe("  ");
+    expect(messageText("Content-Type: image/png\r\n\r\nxx")).toBe("");
   });
 });
